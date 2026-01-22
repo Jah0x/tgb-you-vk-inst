@@ -10,18 +10,23 @@ from rq import Queue
 
 from shared.config import load_settings
 from shared.jobs.serializer import to_json
+from shared.providers import instagram as _instagram_provider  # noqa: F401
 from shared.providers import youtube as _youtube_provider  # noqa: F401
 from shared.router.detector import detect
 
 
 async def handle_message(message: Message, queue: Queue) -> None:
     if not message.text:
-        await message.answer("Пришли ссылку (YouTube Shorts сейчас поддерживается).")
+        await message.answer(
+            "Пришли ссылку (YouTube Shorts и Instagram Reels сейчас поддерживаются)."
+        )
         return
 
     detected = detect(message.text)
     if not detected:
-        await message.answer("Пришли ссылку (YouTube Shorts сейчас поддерживается).")
+        await message.answer(
+            "Пришли ссылку (YouTube Shorts и Instagram Reels сейчас поддерживаются)."
+        )
         return
 
     provider, url = detected

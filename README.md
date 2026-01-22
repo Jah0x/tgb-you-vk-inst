@@ -1,6 +1,6 @@
 # telegram-link-downloader
 
-Телеграм-бот для скачивания ссылок с подключаемыми провайдерами. Сейчас реализован YouTube (shorts/watch/youtu.be).
+Телеграм-бот для скачивания ссылок с подключаемыми провайдерами. Сейчас реализованы YouTube (shorts/watch/youtu.be) и Instagram Reels.
 
 ## Архитектура
 
@@ -31,6 +31,7 @@ export BOT_TOKEN="<telegram_token>"
 export REDIS_URL="redis://localhost:6379/0"
 export RQ_QUEUE="downloads"
 export DATA_DIR="/tmp/tgb-data"
+export INSTAGRAM_COOKIES_PATH="/tmp/instagram-cookies.txt"
 ```
 
 4. Запустите воркер:
@@ -71,8 +72,10 @@ services:
       REDIS_URL: redis://redis:6379/0
       RQ_QUEUE: downloads
       DATA_DIR: /data
+      INSTAGRAM_COOKIES_PATH: /data/instagram-cookies.txt
     volumes:
       - ./data:/data
+      - ./secrets/instagram-cookies.txt:/data/instagram-cookies.txt:ro
     depends_on:
       - redis
 ```
@@ -102,3 +105,21 @@ kubectl apply -f deploy/
 4. Добавьте обработчик в `worker/handlers/<provider>.py` и подключите его в `worker/tasks.py`.
 
 Пример заглушки для VK есть в `shared/providers/vk.py`.
+
+## Instagram Reels: cookies
+
+Для приватных аккаунтов или частых ошибок доступа Instagram может потребоваться авторизация через cookies.
+
+1. Войдите в Instagram в браузере.
+2. Экспортируйте cookies в формате Netscape.
+   - Например, расширением "Get cookies.txt" (Chrome) или "cookies.txt" (Firefox).
+3. Сохраните файл, например в `./secrets/instagram-cookies.txt`.
+4. Укажите путь до файла через переменную окружения:
+
+```bash
+export INSTAGRAM_COOKIES_PATH="/abs/path/to/instagram-cookies.txt"
+```
+
+5. В Docker убедитесь, что файл примонтирован внутрь контейнера (пример выше в Compose).
+
+Если переменная `INSTAGRAM_COOKIES_PATH` не задана, загрузка Reels будет пытаться работать без cookies.
