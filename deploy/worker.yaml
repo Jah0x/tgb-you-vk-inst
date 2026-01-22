@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tgb-worker
+  labels:
+    app: telegram-link-downloader
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tgb-worker
+  template:
+    metadata:
+      labels:
+        app: tgb-worker
+    spec:
+      containers:
+        - name: worker
+          image: registry.example.com/tgb-worker:latest
+          command: ["python", "-m", "worker.main"]
+          envFrom:
+            - configMapRef:
+                name: tgb-config
+            - secretRef:
+                name: tgb-secret
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: tgb-data

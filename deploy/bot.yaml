@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tgb-bot
+  labels:
+    app: telegram-link-downloader
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tgb-bot
+  template:
+    metadata:
+      labels:
+        app: tgb-bot
+    spec:
+      containers:
+        - name: bot
+          image: registry.example.com/tgb-bot:latest
+          command: ["python", "-m", "tg_bot.main"]
+          envFrom:
+            - configMapRef:
+                name: tgb-config
+            - secretRef:
+                name: tgb-secret
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
