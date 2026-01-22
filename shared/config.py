@@ -12,6 +12,7 @@ class Settings:
     data_dir: str
     max_duration_sec: int
     max_filesize_mb: int
+    instagram_cookies_path: str | None
 
 
 def load_settings() -> Settings:
@@ -21,6 +22,7 @@ def load_settings() -> Settings:
     data_dir = os.getenv("DATA_DIR", "/data")
     max_duration_sec = int(os.getenv("MAX_DURATION_SEC", "180"))
     max_filesize_mb = int(os.getenv("MAX_FILESIZE_MB", "45"))
+    instagram_cookies_path = os.getenv("INSTAGRAM_COOKIES_PATH") or None
     return Settings(
         bot_token=bot_token,
         redis_url=redis_url,
@@ -28,4 +30,5 @@ def load_settings() -> Settings:
         data_dir=data_dir,
         max_duration_sec=max_duration_sec,
         max_filesize_mb=max_filesize_mb,
+        instagram_cookies_path=instagram_cookies_path,
     )
