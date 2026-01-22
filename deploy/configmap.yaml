@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tgb-config
+  labels:
+    app: telegram-link-downloader
+data:
+  REDIS_URL: "redis://redis:6379/0"
+  RQ_QUEUE: "downloads"
+  DATA_DIR: "/data"
+  MAX_DURATION_SEC: "180"
+  MAX_FILESIZE_MB: "45"
