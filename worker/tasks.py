@@ -5,13 +5,14 @@ from pathlib import Path
 
 from shared.config import load_settings
 from shared.jobs.serializer import from_json
-from worker.handlers import instagram, youtube
+from worker.handlers import instagram, vk, youtube
 from worker.telegram import send_result
 
 
 HANDLERS = {
     "youtube": youtube.handle,
     "instagram": instagram.handle,
+    "vk": vk.handle,
 }
 
 

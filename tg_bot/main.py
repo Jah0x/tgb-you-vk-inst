@@ -11,6 +11,7 @@ from rq import Queue
 from shared.config import load_settings
 from shared.jobs.serializer import to_json
 from shared.providers import instagram as _instagram_provider  # noqa: F401
+from shared.providers import vk as _vk_provider  # noqa: F401
 from shared.providers import youtube as _youtube_provider  # noqa: F401
 from shared.router.detector import detect
 
@@ -18,14 +19,14 @@ from shared.router.detector import detect
 async def handle_message(message: Message, queue: Queue) -> None:
     if not message.text:
         await message.answer(
-            "Пришли ссылку (YouTube Shorts и Instagram Reels сейчас поддерживаются)."
+            "Пришли ссылку (YouTube, Instagram Reels и VK сейчас поддерживаются)."
         )
         return
 
     detected = detect(message.text)
     if not detected:
         await message.answer(
-            "Пришли ссылку (YouTube Shorts и Instagram Reels сейчас поддерживаются)."
+            "Пришли ссылку (YouTube, Instagram Reels и VK сейчас поддерживаются)."
         )
         return
 

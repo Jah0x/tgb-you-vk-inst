@@ -25,12 +25,16 @@ def handle(job: Job, settings: Settings) -> Path:
         "best[height<=720][ext=mp4]/best[height<=720]",
         "best[height<=480][ext=mp4]/best[height<=480]",
     ]
+    cookies_path = (
+        Path(settings.vk_cookies_path) if settings.vk_cookies_path else None
+    )
     downloaded = download_video(
         job.url,
         tmp_dir,
         formats,
         settings.max_duration_sec,
         settings.max_filesize_mb,
+        cookies_path,
     )
 
     faststart(downloaded, cached)
