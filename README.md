@@ -1,6 +1,6 @@
 # telegram-link-downloader
 
-Телеграм-бот для скачивания ссылок с подключаемыми провайдерами. Сейчас реализованы YouTube (shorts/watch/youtu.be) и Instagram Reels.
+Телеграм-бот для скачивания ссылок с подключаемыми провайдерами. Сейчас реализованы YouTube (shorts/watch/youtu.be), Instagram Reels и VK (vk.com/vk.ru).
 
 ## Архитектура
 
@@ -32,6 +32,7 @@ export REDIS_URL="redis://localhost:6379/0"
 export RQ_QUEUE="downloads"
 export DATA_DIR="/tmp/tgb-data"
 export INSTAGRAM_COOKIES_PATH="/tmp/instagram-cookies.txt"
+export VK_COOKIES_PATH="/tmp/vk-cookies.txt"
 ```
 
 4. Запустите воркер:
@@ -73,9 +74,11 @@ services:
       RQ_QUEUE: downloads
       DATA_DIR: /data
       INSTAGRAM_COOKIES_PATH: /data/instagram-cookies.txt
+      VK_COOKIES_PATH: /data/vk-cookies.txt
     volumes:
       - ./data:/data
       - ./secrets/instagram-cookies.txt:/data/instagram-cookies.txt:ro
+      - ./secrets/vk-cookies.txt:/data/vk-cookies.txt:ro
     depends_on:
       - redis
 ```
@@ -104,7 +107,7 @@ kubectl apply -f deploy/
 3. Зарегистрируйте провайдера через `@register`.
 4. Добавьте обработчик в `worker/handlers/<provider>.py` и подключите его в `worker/tasks.py`.
 
-Пример заглушки для VK есть в `shared/providers/vk.py`.
+VK-провайдер работает через `yt-dlp`, поэтому поддерживает видео/клипы по прямым ссылкам.
 
 ## Instagram Reels: cookies
 
@@ -123,3 +126,20 @@ export INSTAGRAM_COOKIES_PATH="/abs/path/to/instagram-cookies.txt"
 5. В Docker убедитесь, что файл примонтирован внутрь контейнера (пример выше в Compose).
 
 Если переменная `INSTAGRAM_COOKIES_PATH` не задана, загрузка Reels будет пытаться работать без cookies.
+
+## VK: cookies
+
+Для приватных видео или ограничений VK можно использовать cookies.
+
+1. Войдите в VK в браузере.
+2. Экспортируйте cookies в формате Netscape.
+3. Сохраните файл, например в `./secrets/vk-cookies.txt`.
+4. Укажите путь до файла через переменную окружения:
+
+```bash
+export VK_COOKIES_PATH="/abs/path/to/vk-cookies.txt"
+```
+
+5. В Docker убедитесь, что файл примонтирован внутрь контейнера (пример выше в Compose).
+
+Если переменная `VK_COOKIES_PATH` не задана, загрузка будет пытаться работать без cookies.
