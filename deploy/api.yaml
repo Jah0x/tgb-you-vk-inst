@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tgb-api
+  labels:
+    app: telegram-link-downloader
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tgb-api
+  template:
+    metadata:
+      labels:
+        app: tgb-api
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/tgb-api:latest
+          command: ["python", "-m", "api.main"]
+          envFrom:
+            - configMapRef:
+                name: tgb-config
+            - secretRef:
+                name: tgb-secret
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: tgb-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tgb-api
+  labels:
+    app: telegram-link-downloader
+spec:
+  type: ClusterIP
+  selector:
+    app: tgb-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

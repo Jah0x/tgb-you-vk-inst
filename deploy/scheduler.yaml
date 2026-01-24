@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tgb-scheduler
+  labels:
+    app: telegram-link-downloader
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tgb-scheduler
+  template:
+    metadata:
+      labels:
+        app: tgb-scheduler
+    spec:
+      containers:
+        - name: scheduler
+          image: registry.example.com/tgb-scheduler:latest
+          command: ["python", "-m", "worker.scheduler"]
+          envFrom:
+            - configMapRef:
+                name: tgb-config
+            - secretRef:
+                name: tgb-secret
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: tgb-data
