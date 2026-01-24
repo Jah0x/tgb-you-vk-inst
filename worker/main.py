@@ -23,8 +23,12 @@ def main() -> None:
     init_db(settings.db_url)
 
     with Connection(redis_conn):
-        queue = Queue(settings.rq_queue)
-        worker = Worker([queue])
+        queues = [
+            Queue(settings.rq_queue),
+            Queue(settings.rq_grid_actions_queue),
+            Queue(settings.rq_post_events_queue),
+        ]
+        worker = Worker(queues)
         worker.work()
 
 
