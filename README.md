@@ -101,12 +101,16 @@ services:
 ```bash
 docker build -t registry.example.com/tgb-bot:latest -f Dockerfile.bot .
 docker build -t registry.example.com/tgb-worker:latest -f Dockerfile.worker .
+docker build -t registry.example.com/tgb-api:latest -f Dockerfile.api .
+docker build -t registry.example.com/tgb-scheduler:latest -f Dockerfile.worker .
 ```
 
 2. Задеплойте манифесты:
 
 ```bash
 kubectl apply -f deploy/
+kubectl apply -f deploy/api.yaml
+kubectl apply -f deploy/scheduler.yaml
 ```
 
 3. Обновите `deploy/secret.yaml` с токеном бота.
