@@ -6,18 +6,32 @@ from aiogram.types import Message
 from shared.services import add_accounts, list_accounts
 from shared.services.errors import ServiceError
 from shared.storage import Storage
+from shared.config import Settings
+from tg_bot.handlers.permissions import Role, ensure_role
 from tg_bot.handlers.utils import format_accounts
 
 ACCOUNTS_HELP = (
     "Команды для аккаунтов:\n"
-    "• /accounts add <name1,name2> — добавить один или несколько аккаунтов\n"
-    "• /accounts list — показать список аккаунтов\n"
+    "• /accounts add <name1,name2> — добавить один или несколько аккаунтов (админ)\n"
+    "• /accounts list — показать список аккаунтов (админ/оператор)\n"
     "\n"
     "Имя аккаунта: латиница, цифры, символы _ . - (до 64 символов)."
 )
 
+ACCOUNT_ADD_HELP = (
+    "Форма добавления аккаунта:\n"
+    "1) Имя аккаунта (до 64 символов): латиница, цифры, символы _ . -\n"
+    "2) Для нескольких аккаунтов используйте запятую.\n"
+    "Пример: /accounts add brand_ru,brand_en\n"
+    "\n"
+    "Подсказки по cookies/токенам:\n"
+    "• Бот не принимает cookies/токены в сообщениях.\n"
+    "• Instagram/VK cookies задаются через файлы Netscape и переменные "
+    "INSTAGRAM_COOKIES_PATH/VK_COOKIES_PATH.\n"
+    "• Секреты и токены храните во внешнем хранилище (env/secret manager)."
+)
 
-def register_accounts(dp: Dispatcher, store: Storage) -> None:
+def register_accounts(dp: Dispatcher, store: Storage, settings: Settings) -> None:
     @dp.message(F.text.startswith("/accounts"))
     async def _accounts_handler(message: Message) -> None:
         if not message.text:
@@ -30,6 +44,13 @@ def register_accounts(dp: Dispatcher, store: Storage) -> None:
 
         action = parts[1].lower()
         if action == "list":
+            if not await ensure_role(
+                message,
+                settings,
+                {Role.ADMIN, Role.OPERATOR},
+                "просмотр списка аккаунтов",
+            ):
+                return
             accounts = list_accounts(store, message.chat.id).accounts
             await message.answer(
                 "Ваши аккаунты:\n" + format_accounts(accounts)
@@ -39,9 +60,18 @@ def register_accounts(dp: Dispatcher, store: Storage) -> None:
             return
 
         if action == "add":
+            if not await ensure_role(
+                message,
+                settings,
+                {Role.ADMIN},
+                "добавление аккаунтов",
+            ):
+                return
             if len(parts) < 3:
                 await message.answer(
                     "Укажите аккаунты: /accounts add name1,name2\n"
+                    + ACCOUNT_ADD_HELP
+                    + "\n\n"
                     + ACCOUNTS_HELP
                 )
                 return

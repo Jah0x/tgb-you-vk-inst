@@ -18,6 +18,22 @@ class Settings:
     instagram_cookies_path: str | None
     vk_cookies_path: str | None
     scheduler_poll_seconds: int
+    admin_chat_ids: frozenset[int]
+    operator_chat_ids: frozenset[int]
+
+
+def _parse_chat_ids(raw: str | None) -> frozenset[int]:
+    if not raw:
+        return frozenset()
+    ids = []
+    for chunk in raw.split(","):
+        item = chunk.strip()
+        if not item:
+            continue
+        if not item.lstrip("-").isdigit():
+            continue
+        ids.append(int(item))
+    return frozenset(ids)
 
 
 def load_settings() -> Settings:
@@ -33,6 +49,8 @@ def load_settings() -> Settings:
     instagram_cookies_path = os.getenv("INSTAGRAM_COOKIES_PATH") or None
     vk_cookies_path = os.getenv("VK_COOKIES_PATH") or None
     scheduler_poll_seconds = int(os.getenv("SCHEDULER_POLL_SECONDS", "30"))
+    admin_chat_ids = _parse_chat_ids(os.getenv("ADMIN_CHAT_IDS"))
+    operator_chat_ids = _parse_chat_ids(os.getenv("OPERATOR_CHAT_IDS"))
     return Settings(
         bot_token=bot_token,
         redis_url=redis_url,
@@ -46,4 +64,6 @@ def load_settings() -> Settings:
         instagram_cookies_path=instagram_cookies_path,
         vk_cookies_path=vk_cookies_path,
         scheduler_poll_seconds=scheduler_poll_seconds,
+        admin_chat_ids=admin_chat_ids,
+        operator_chat_ids=operator_chat_ids,
     )

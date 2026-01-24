@@ -30,6 +30,8 @@ docker run --rm -p 6379:6379 redis:7
 export BOT_TOKEN="<telegram_token>"
 export REDIS_URL="redis://localhost:6379/0"
 export RQ_QUEUE="downloads"
+export ADMIN_CHAT_IDS="123456789"
+export OPERATOR_CHAT_IDS="987654321,1122334455"
 export DATA_DIR="/tmp/tgb-data"
 export INSTAGRAM_COOKIES_PATH="/tmp/instagram-cookies.txt"
 export VK_COOKIES_PATH="/tmp/vk-cookies.txt"
