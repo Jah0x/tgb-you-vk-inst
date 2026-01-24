@@ -14,6 +14,8 @@ from shared.providers import instagram as _instagram_provider  # noqa: F401
 from shared.providers import vk as _vk_provider  # noqa: F401
 from shared.providers import youtube as _youtube_provider  # noqa: F401
 from shared.router.detector import detect
+from tg_bot.handlers import register_handlers
+from tg_bot.store import BotStore
 
 
 async def handle_message(message: Message, queue: Queue) -> None:
@@ -52,7 +54,10 @@ async def main() -> None:
     bot = Bot(token=settings.bot_token)
     dp = Dispatcher()
 
-    @dp.message(F.text)
+    store = BotStore()
+    register_handlers(dp, store)
+
+    @dp.message(F.text & ~F.text.startswith("/"))
     async def _message_handler(message: Message) -> None:
         await handle_message(message, queue)
 
