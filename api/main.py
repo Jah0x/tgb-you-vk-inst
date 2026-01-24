@@ -16,6 +16,7 @@ from shared.services import (
     delete_grid,
     list_accounts,
     list_grids,
+    remove_accounts_from_grid,
     schedule_grid_run,
 )
 from shared.services.errors import ConflictError, NotFoundError, ServiceError, ValidationError
@@ -64,6 +65,11 @@ class GridCreateResponseModel(BaseModel):
 
 class GridAccountsResponseModel(BaseModel):
     added: list[str]
+    skipped: list[str]
+
+
+class GridAccountsRemoveResponseModel(BaseModel):
+    removed: list[str]
     skipped: list[str]
 
 
@@ -171,3 +177,21 @@ def api_run_grid(
     except ServiceError as exc:
         _handle_service_error(exc)
     return {"accounts": result.accounts, "actions": result.actions}
+
+
+@app.post(
+    "/grids/{chat_id}/{grid_name}/accounts/remove",
+    response_model=GridAccountsRemoveResponseModel,
+)
+def api_remove_grid_accounts(
+    chat_id: Annotated[int, Path(..., ge=1)],
+    grid_name: str,
+    payload: GridAccountsRequest,
+) -> GridAccountsRemoveResponseModel:
+    raw_accounts = _format_accounts_payload(payload)
+    try:
+        result = remove_accounts_from_grid(store, chat_id, grid_name, raw_accounts)
+        return GridAccountsRemoveResponseModel(**asdict(result))
+    except ServiceError as exc:
+        _handle_service_error(exc)
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
