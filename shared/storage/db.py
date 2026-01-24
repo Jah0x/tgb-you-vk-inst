@@ -64,6 +64,15 @@ class Storage:
             conn.commit()
         return added, skipped
 
+    def delete_account(self, chat_id: int, name: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM accounts WHERE chat_id = ? AND name = ?",
+                (chat_id, name),
+            )
+            conn.commit()
+        return cursor.rowcount > 0
+
     def create_grid(self, chat_id: int, name: str) -> bool:
         with self._connect() as conn:
             try:
@@ -75,6 +84,15 @@ class Storage:
                 return True
             except sqlite3.IntegrityError:
                 return False
+
+    def delete_grid(self, chat_id: int, name: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM grids WHERE chat_id = ? AND name = ?",
+                (chat_id, name),
+            )
+            conn.commit()
+        return cursor.rowcount > 0
 
     def list_grids(self, chat_id: int) -> list[tuple[str, list[str]]]:
         with self._connect() as conn:
