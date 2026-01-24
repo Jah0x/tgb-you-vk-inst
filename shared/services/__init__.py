@@ -6,9 +6,11 @@ from shared.services.accounts import (
     list_accounts,
 )
 from shared.services.actions import (
+    ComplaintActionCreateResponse,
     PostEventCreateResponse,
     PostEventList,
     add_post_event,
+    create_complaint_action_for_target,
     create_post_event_for_target,
     list_pending_post_events,
     mark_post_event_processed,
@@ -45,6 +47,7 @@ __all__ = [
     "AccountListResponse",
     "PostEventList",
     "PostEventCreateResponse",
+    "ComplaintActionCreateResponse",
     "GridAccountsResponse",
     "GridAccountsRemoveResponse",
     "GridActionResponse",
@@ -65,6 +68,7 @@ __all__ = [
     "add_accounts_to_grid",
     "add_grid_action",
     "add_post_event",
+    "create_complaint_action_for_target",
     "create_post_event_for_target",
     "create_grid",
     "delete_account",
