@@ -3,8 +3,10 @@ from __future__ import annotations
 from aiogram import Dispatcher, F
 from aiogram.types import Message
 
-from tg_bot.handlers.utils import format_accounts, parse_name_list, validate_names
+from shared.services import add_accounts, list_accounts
+from shared.services.errors import ServiceError
 from shared.storage import Storage
+from tg_bot.handlers.utils import format_accounts
 
 ACCOUNTS_HELP = (
     "Команды для аккаунтов:\n"
@@ -28,7 +30,7 @@ def register_accounts(dp: Dispatcher, store: Storage) -> None:
 
         action = parts[1].lower()
         if action == "list":
-            accounts = store.list_accounts(message.chat.id)
+            accounts = list_accounts(store, message.chat.id).accounts
             await message.answer(
                 "Ваши аккаунты:\n" + format_accounts(accounts)
                 if accounts
@@ -44,24 +46,14 @@ def register_accounts(dp: Dispatcher, store: Storage) -> None:
                 )
                 return
 
-            names = parse_name_list(parts[2])
-            if not names:
-                await message.answer(
-                    "Не удалось распознать аккаунты. Пример: /accounts add name1,name2"
-                )
+            try:
+                result = add_accounts(store, message.chat.id, parts[2])
+            except ServiceError as exc:
+                response = [exc.message, *exc.details] if exc.details else [exc.message]
+                await message.answer("\n".join(response))
                 return
 
-            invalid = validate_names(names)
-            if invalid:
-                await message.answer(
-                    "Некорректные имена: "
-                    + ", ".join(invalid)
-                    + "\n"
-                    + ACCOUNTS_HELP
-                )
-                return
-
-            added, skipped = store.add_accounts(message.chat.id, names)
+            added, skipped = result.added, result.skipped
             response_lines = []
             if added:
                 response_lines.append("Добавлены: " + ", ".join(added))

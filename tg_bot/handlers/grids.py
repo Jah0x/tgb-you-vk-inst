@@ -3,8 +3,10 @@ from __future__ import annotations
 from aiogram import Dispatcher, F
 from aiogram.types import Message
 
-from tg_bot.handlers.utils import format_accounts, parse_name_list, validate_names
+from shared.services import add_accounts_to_grid, create_grid, list_grids, run_grid
+from shared.services.errors import ServiceError
 from shared.storage import Storage
+from tg_bot.handlers.utils import format_accounts
 
 GRIDS_HELP = (
     "Команды для сеток:\n"
@@ -18,7 +20,7 @@ GRIDS_HELP = (
 
 
 async def _respond_with_grids(message: Message, store: Storage) -> None:
-    grids = store.list_grids(message.chat.id)
+    grids = list_grids(store, message.chat.id).grids
     if not grids:
         await message.answer(
             "Сеток пока нет. Создайте сетку командой /grids create <grid_name>."
@@ -26,45 +28,17 @@ async def _respond_with_grids(message: Message, store: Storage) -> None:
         return
 
     lines = ["Ваши сетки:"]
-    for grid_name, account_names in grids:
-        lines.append(f"• {grid_name}")
-        if account_names:
-            lines.append("  " + format_accounts(account_names).replace("\n", "\n  "))
+    for grid in grids:
+        lines.append(f"• {grid.name}")
+        if grid.accounts:
+            lines.append("  " + format_accounts(grid.accounts).replace("\n", "\n  "))
         else:
             lines.append("  (пока нет аккаунтов)")
     await message.answer("\n".join(lines))
 
 
-def _resolve_account_selection(
-    message: Message, store: Storage, raw: str
-) -> tuple[list[str], list[str] | None]:
-    raw = raw.strip()
-    if raw.lower() == "all":
-        accounts = store.list_accounts(message.chat.id)
-        if not accounts:
-            return [], ["Список аккаунтов пуст. Добавьте аккаунты командой /accounts add."]
-        return accounts, None
-
-    names = parse_name_list(raw)
-    if not names:
-        return [], [
-            "Не удалось распознать список аккаунтов. Пример: name1,name2 или all."
-        ]
-
-    invalid = validate_names(names)
-    if invalid:
-        return [], [
-            "Некорректные имена аккаунтов: " + ", ".join(invalid),
-            "Используйте латиницу, цифры и символы _ . -",
-        ]
-
-    found, missing = store.resolve_accounts(message.chat.id, names)
-    if missing:
-        return [], [
-            "Не найдены аккаунты: " + ", ".join(missing),
-            "Добавьте их командой /accounts add.",
-        ]
-    return found, None
+def _service_error_response(exc: ServiceError) -> str:
+    return "\n".join([exc.message, *exc.details]) if exc.details else exc.message
 
 
 def register_grids(dp: Dispatcher, store: Storage) -> None:
@@ -91,18 +65,10 @@ def register_grids(dp: Dispatcher, store: Storage) -> None:
                 return
 
             name = parts[2].strip()
-            invalid = validate_names([name])
-            if invalid:
-                await message.answer(
-                    "Некорректное имя сетки. "
-                    "Разрешены латиница, цифры и символы _ . -"
-                )
-                return
-
-            if not store.create_grid(message.chat.id, name):
-                await message.answer(
-                    f"Сетка {name} уже существует. Используйте другое имя."
-                )
+            try:
+                create_grid(store, message.chat.id, name)
+            except ServiceError as exc:
+                await message.answer(_service_error_response(exc))
                 return
 
             await message.answer(
@@ -119,28 +85,13 @@ def register_grids(dp: Dispatcher, store: Storage) -> None:
                 return
 
             grid_name = parts[2].strip()
-            invalid = validate_names([grid_name])
-            if invalid:
-                await message.answer(
-                    "Некорректное имя сетки. "
-                    "Разрешены латиница, цифры и символы _ . -"
-                )
+            try:
+                result = add_accounts_to_grid(store, message.chat.id, grid_name, parts[3])
+            except ServiceError as exc:
+                await message.answer(_service_error_response(exc))
                 return
 
-            if store.get_grid_id(message.chat.id, grid_name) is None:
-                await message.answer(
-                    f"Сетка {grid_name} не найдена. Создайте её командой /grids create."
-                )
-                return
-
-            accounts, errors = _resolve_account_selection(message, store, parts[3])
-            if errors:
-                await message.answer("\n".join(errors))
-                return
-
-            added, skipped = store.add_accounts_to_grid(
-                message.chat.id, grid_name, accounts
-            )
+            added, skipped = result.added, result.skipped
             response_lines = []
             if added:
                 response_lines.append("Добавлены: " + ", ".join(added))
@@ -157,23 +108,10 @@ def register_grids(dp: Dispatcher, store: Storage) -> None:
                 return
 
             grid_name = parts[2].strip()
-            invalid = validate_names([grid_name])
-            if invalid:
-                await message.answer(
-                    "Некорректное имя сетки. "
-                    "Разрешены латиница, цифры и символы _ . -"
-                )
-                return
-
-            if store.get_grid_id(message.chat.id, grid_name) is None:
-                await message.answer(
-                    f"Сетка {grid_name} не найдена. Создайте её командой /grids create."
-                )
-                return
-
-            accounts, errors = _resolve_account_selection(message, store, parts[3])
-            if errors:
-                await message.answer("\n".join(errors))
+            try:
+                accounts = run_grid(store, message.chat.id, grid_name, parts[3])
+            except ServiceError as exc:
+                await message.answer(_service_error_response(exc))
                 return
 
             await message.answer(
