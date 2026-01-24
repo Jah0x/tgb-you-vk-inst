@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import random
+from datetime import timedelta
 from dataclasses import dataclass
 from typing import Any
 
@@ -558,6 +560,16 @@ def remove_accounts_from_grid(
     return GridAccountsRemoveResponse(removed=removed, skipped=skipped)
 
 
+def _resolve_grid_action_delay_seconds(config: GridActionConfig) -> int:
+    min_delay_s = config.min_delay_s
+    max_delay_s = config.max_delay_s
+    if min_delay_s is None or max_delay_s is None:
+        return 0
+    if config.random_jitter_enabled:
+        return random.randint(min_delay_s, max_delay_s)
+    return min_delay_s
+
+
 def run_grid(
     store: Storage,
     settings: Settings,
@@ -607,10 +619,18 @@ def run_grid(
                 "action": action.action,
             }
         )
-        grid_queue.enqueue(
-            "worker.tasks.grid_actions.apply_grid_action",
-            payload,
-        )
+        delay_seconds = _resolve_grid_action_delay_seconds(config)
+        if delay_seconds > 0:
+            grid_queue.enqueue_in(
+                timedelta(seconds=delay_seconds),
+                "worker.tasks.grid_actions.apply_grid_action",
+                payload,
+            )
+        else:
+            grid_queue.enqueue(
+                "worker.tasks.grid_actions.apply_grid_action",
+                payload,
+            )
         queued_jobs += 1
 
     return GridRunResponse(

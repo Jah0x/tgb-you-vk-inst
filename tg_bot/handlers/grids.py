@@ -30,7 +30,7 @@ GRIDS_HELP = (
     "• /grids add-account <grid_name> <name1,name2|all> — добавить аккаунты в сетку (админ)\n"
     "• /grids remove-account <grid_name> <name1,name2|all> — удалить аккаунты из сетки (админ)\n"
     "• /grids add-action <grid_name> <action> [--count=N] [--jitter=on|off] "
-    "[--min=SEC] [--max=SEC] [--account=all|name1,name2] "
+    "[--delay=SEC] [--min=SEC] [--max=SEC] [--account=all|name1,name2] "
     "[--alloc-count=N|--alloc-percent=N|--alloc-accounts=name1,name2]\n"
     "  — добавить действие для сетки (админ)\n"
     "• /grids remove-action <grid_name> <action> — удалить действие из сетки (админ)\n"
@@ -84,6 +84,11 @@ def _parse_action_config(tokens: list[str]) -> GridActionConfigPayload | None:
                 payload["count"] = int(value)
             else:
                 payload["count"] = value
+        elif token.startswith("--delay="):
+            value = token.split("=", 1)[1]
+            if value.isdigit():
+                min_delay_s = int(value)
+                max_delay_s = min_delay_s
         elif token.startswith("--min="):
             value = token.split("=", 1)[1]
             min_delay_s = int(value) if value.isdigit() else None

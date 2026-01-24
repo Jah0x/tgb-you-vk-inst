@@ -48,6 +48,7 @@ class GridAccountsRequest(BaseModel):
 class GridActionConfigRequest(BaseModel):
     type: str | None = None
     payload: dict[str, object] | None = None
+    delay_s: int | None = Field(None, ge=0)
     min_delay_s: int | None = Field(None, ge=0)
     max_delay_s: int | None = Field(None, ge=0)
     random_jitter_enabled: bool | None = None
@@ -248,6 +249,11 @@ def api_add_grid_action(
 ) -> GridActionResponseModel:
     config_payload: GridActionConfigPayload | None = None
     if payload.config:
+        min_delay_s = payload.config.min_delay_s
+        max_delay_s = payload.config.max_delay_s
+        if payload.config.delay_s is not None and min_delay_s is None and max_delay_s is None:
+            min_delay_s = payload.config.delay_s
+            max_delay_s = payload.config.delay_s
         allocation_value: str | None = None
         if payload.config.account_allocation_value is not None:
             if isinstance(payload.config.account_allocation_value, list):
@@ -257,8 +263,8 @@ def api_add_grid_action(
         config_payload = GridActionConfigPayload(
             type=payload.config.type,
             payload=payload.config.payload,
-            min_delay_s=payload.config.min_delay_s,
-            max_delay_s=payload.config.max_delay_s,
+            min_delay_s=min_delay_s,
+            max_delay_s=max_delay_s,
             random_jitter_enabled=payload.config.random_jitter_enabled,
             account_selector=payload.config.account_selector,
             account_allocation=payload.config.account_allocation,
