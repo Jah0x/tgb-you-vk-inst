@@ -41,6 +41,8 @@ class GridActionConfig:
     max_delay_s: int | None
     random_jitter_enabled: bool
     account_selector: str | None
+    account_allocation: str | None
+    account_allocation_value: str | None
 
 
 @dataclass(frozen=True)

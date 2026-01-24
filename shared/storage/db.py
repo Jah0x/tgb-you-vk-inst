@@ -148,7 +148,9 @@ class Storage:
                     gac.min_delay_s AS min_delay_s,
                     gac.max_delay_s AS max_delay_s,
                     gac.random_jitter_enabled AS random_jitter_enabled,
-                    gac.account_selector AS account_selector
+                    gac.account_selector AS account_selector,
+                    gac.account_allocation AS account_allocation,
+                    gac.account_allocation_value AS account_allocation_value
                 FROM grid_actions ga
                 JOIN grids g ON g.id = ga.grid_id
                 LEFT JOIN grid_action_configs gac ON gac.grid_action_id = ga.id
@@ -174,6 +176,8 @@ class Storage:
                     max_delay_s=row["max_delay_s"],
                     random_jitter_enabled=bool(row["random_jitter_enabled"]),
                     account_selector=row["account_selector"],
+                    account_allocation=row["account_allocation"],
+                    account_allocation_value=row["account_allocation_value"],
                 )
             results.append((action, config))
         return results
@@ -210,6 +214,8 @@ class Storage:
         max_delay_s: int | None,
         random_jitter_enabled: bool,
         account_selector: str | None,
+        account_allocation: str | None,
+        account_allocation_value: str | None,
     ) -> None:
         with self._connect() as conn:
             conn.execute(
@@ -221,16 +227,20 @@ class Storage:
                     min_delay_s,
                     max_delay_s,
                     random_jitter_enabled,
-                    account_selector
+                    account_selector,
+                    account_allocation,
+                    account_allocation_value
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(grid_action_id) DO UPDATE SET
                     type = excluded.type,
                     payload_json = excluded.payload_json,
                     min_delay_s = excluded.min_delay_s,
                     max_delay_s = excluded.max_delay_s,
                     random_jitter_enabled = excluded.random_jitter_enabled,
-                    account_selector = excluded.account_selector
+                    account_selector = excluded.account_selector,
+                    account_allocation = excluded.account_allocation,
+                    account_allocation_value = excluded.account_allocation_value
                 """,
                 (
                     grid_action_id,
@@ -240,6 +250,8 @@ class Storage:
                     max_delay_s,
                     int(random_jitter_enabled),
                     account_selector,
+                    account_allocation,
+                    account_allocation_value,
                 ),
             )
             conn.commit()
