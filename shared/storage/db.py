@@ -132,6 +132,43 @@ class Storage:
             for row in rows
         ]
 
+    def add_grid_action(self, chat_id: int, grid_name: str, action: str) -> bool:
+        with self._connect() as conn:
+            grid = conn.execute(
+                "SELECT id FROM grids WHERE chat_id = ? AND name = ?",
+                (chat_id, grid_name),
+            ).fetchone()
+            if not grid:
+                return False
+            grid_id = grid["id"]
+            existing = conn.execute(
+                "SELECT 1 FROM grid_actions WHERE grid_id = ? AND action = ?",
+                (grid_id, action),
+            ).fetchone()
+            if existing:
+                return False
+            conn.execute(
+                "INSERT INTO grid_actions (grid_id, action) VALUES (?, ?)",
+                (grid_id, action),
+            )
+            conn.commit()
+        return True
+
+    def remove_grid_action(self, chat_id: int, grid_name: str, action: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM grid_actions
+                WHERE action = ?
+                  AND grid_id = (
+                      SELECT id FROM grids WHERE chat_id = ? AND name = ?
+                  )
+                """,
+                (action, chat_id, grid_name),
+            )
+            conn.commit()
+        return cursor.rowcount > 0
+
     def get_grid_id(self, chat_id: int, name: str) -> int | None:
         with self._connect() as conn:
             row = conn.execute(

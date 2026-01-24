@@ -47,6 +47,16 @@ class GridRunResponse:
     queued_jobs: int
 
 
+@dataclass(frozen=True)
+class GridActionsResponse:
+    actions: list[str]
+
+
+@dataclass(frozen=True)
+class GridActionResponse:
+    action: str
+
+
 def list_grids(store: Storage, chat_id: int) -> GridListResponse:
     grids = [GridInfo(name=name, accounts=accounts) for name, accounts in store.list_grids(chat_id)]
     return GridListResponse(grids=grids)
@@ -78,6 +88,63 @@ def delete_grid(store: Storage, chat_id: int, name: str) -> None:
         raise NotFoundError(
             "Сетка не найдена.",
             [f"Сетка {name} не найдена."],
+        )
+
+
+def list_grid_actions(store: Storage, chat_id: int, grid_name: str) -> GridActionsResponse:
+    invalid = validate_names([grid_name])
+    if invalid:
+        raise ValidationError(
+            "Некорректное имя сетки.",
+            ["Разрешены латиница, цифры и символы _ . -"],
+        )
+    if store.get_grid_id(chat_id, grid_name) is None:
+        raise NotFoundError(
+            f"Сетка {grid_name} не найдена.",
+            ["Создайте её командой /grids create."],
+        )
+    actions = [action.action for action in store.list_grid_actions(chat_id, grid_name)]
+    return GridActionsResponse(actions=actions)
+
+
+def add_grid_action(
+    store: Storage, chat_id: int, grid_name: str, action: str
+) -> GridActionResponse:
+    invalid = validate_names([grid_name, action])
+    if invalid:
+        raise ValidationError(
+            "Некорректные значения.",
+            ["Разрешены латиница, цифры и символы _ . -"],
+        )
+    if store.get_grid_id(chat_id, grid_name) is None:
+        raise NotFoundError(
+            f"Сетка {grid_name} не найдена.",
+            ["Создайте её командой /grids create."],
+        )
+    if not store.add_grid_action(chat_id, grid_name, action):
+        raise ConflictError(
+            "Действие уже добавлено.",
+            [f"Действие {action} уже есть в сетке {grid_name}."],
+        )
+    return GridActionResponse(action=action)
+
+
+def remove_grid_action(store: Storage, chat_id: int, grid_name: str, action: str) -> None:
+    invalid = validate_names([grid_name, action])
+    if invalid:
+        raise ValidationError(
+            "Некорректные значения.",
+            ["Разрешены латиница, цифры и символы _ . -"],
+        )
+    if store.get_grid_id(chat_id, grid_name) is None:
+        raise NotFoundError(
+            f"Сетка {grid_name} не найдена.",
+            ["Создайте её командой /grids create."],
+        )
+    if not store.remove_grid_action(chat_id, grid_name, action):
+        raise NotFoundError(
+            "Действие не найдено.",
+            [f"Действие {action} не найдено в сетке {grid_name}."],
         )
 
 
