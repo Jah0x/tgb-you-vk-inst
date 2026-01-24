@@ -25,6 +25,13 @@ class GridAccount:
 
 
 @dataclass(frozen=True)
+class GridAction:
+    id: int
+    grid_id: int
+    action: str
+
+
+@dataclass(frozen=True)
 class Channel:
     id: int
     chat_id: int

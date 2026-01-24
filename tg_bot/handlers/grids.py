@@ -4,7 +4,12 @@ from aiogram import Dispatcher, F
 from aiogram.types import Message
 
 from shared.config import Settings
-from shared.services import add_accounts_to_grid, create_grid, list_grids, run_grid
+from shared.services import (
+    add_accounts_to_grid,
+    create_grid,
+    list_grids,
+    schedule_grid_run,
+)
 from shared.services.errors import ServiceError
 from shared.storage import Storage
 from tg_bot.handlers.permissions import Role, ensure_role
@@ -139,14 +144,17 @@ def register_grids(dp: Dispatcher, store: Storage, settings: Settings) -> None:
 
             grid_name = parts[2].strip()
             try:
-                accounts = run_grid(store, message.chat.id, grid_name, parts[3])
+                result = schedule_grid_run(
+                    store, settings, message.chat.id, grid_name, parts[3]
+                )
             except ServiceError as exc:
                 await message.answer(_service_error_response(exc))
                 return
 
             await message.answer(
                 "Запускаю сетку "
-                f"{grid_name} для аккаунтов: {', '.join(accounts)}."
+                f"{grid_name} для аккаунтов: {', '.join(result.accounts)}.\n"
+                f"Действия: {', '.join(result.actions)}."
             )
             return
 
