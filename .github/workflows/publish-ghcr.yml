@@ -55,5 +55,7 @@ jobs:
             org.opencontainers.image.source=${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
           tags: |
+
             ghcr.io/${{ env.OWNER_LOWER }}/${{ matrix.image }}:latest
             ghcr.io/${{ env.OWNER_LOWER }}/${{ matrix.image }}:${{ github.sha }}
+
