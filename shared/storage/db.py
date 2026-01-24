@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 from urllib.parse import urlparse
 
+from shared.models import EscalationRule, PostEvent, ScheduleRule
 from shared.storage.schema import SCHEMA_STATEMENTS
 
 
@@ -141,3 +142,124 @@ class Storage:
         found = [name for name in names if name in existing]
         missing = [name for name in names if name not in existing]
         return found, missing
+
+    def list_active_schedule_rules(self) -> list[ScheduleRule]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, channel_id, rule, is_active
+                FROM schedule_rules
+                WHERE is_active = 1
+                ORDER BY id
+                """
+            ).fetchall()
+        return [
+            ScheduleRule(
+                id=row["id"],
+                channel_id=row["channel_id"],
+                rule=row["rule"],
+                is_active=bool(row["is_active"]),
+            )
+            for row in rows
+        ]
+
+    def list_escalation_rules(self, channel_id: int) -> list[EscalationRule]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, channel_id, rule, level
+                FROM escalation_rules
+                WHERE channel_id = ?
+                ORDER BY level
+                """,
+                (channel_id,),
+            ).fetchall()
+        return [
+            EscalationRule(
+                id=row["id"],
+                channel_id=row["channel_id"],
+                rule=row["rule"],
+                level=row["level"],
+            )
+            for row in rows
+        ]
+
+    def get_schedule_state(self, rule_id: int) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT last_run_at FROM schedule_state WHERE rule_id = ?",
+                (rule_id,),
+            ).fetchone()
+        return row["last_run_at"] if row else None
+
+    def update_schedule_state(self, rule_id: int, last_run_at: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO schedule_state (rule_id, last_run_at)
+                VALUES (?, ?)
+                ON CONFLICT(rule_id) DO UPDATE SET last_run_at = excluded.last_run_at
+                """,
+                (rule_id, last_run_at),
+            )
+            conn.commit()
+
+    def add_post_event(self, channel_id: int, post_key: str) -> bool:
+        with self._connect() as conn:
+            try:
+                conn.execute(
+                    "INSERT INTO post_events (channel_id, post_key) VALUES (?, ?)",
+                    (channel_id, post_key),
+                )
+                conn.commit()
+                return True
+            except sqlite3.IntegrityError:
+                return False
+
+    def list_pending_post_events(
+        self, channel_id: int | None = None, limit: int = 100
+    ) -> list[PostEvent]:
+        with self._connect() as conn:
+            if channel_id is None:
+                rows = conn.execute(
+                    """
+                    SELECT id, channel_id, post_key, status
+                    FROM post_events
+                    WHERE status = 'pending'
+                    ORDER BY id
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT id, channel_id, post_key, status
+                    FROM post_events
+                    WHERE status = 'pending' AND channel_id = ?
+                    ORDER BY id
+                    LIMIT ?
+                    """,
+                    (channel_id, limit),
+                ).fetchall()
+        return [
+            PostEvent(
+                id=row["id"],
+                channel_id=row["channel_id"],
+                post_key=row["post_key"],
+                status=row["status"],
+            )
+            for row in rows
+        ]
+
+    def mark_post_event_processed(self, event_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE post_events
+                SET status = 'processed', processed_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (event_id,),
+            )
+            conn.commit()

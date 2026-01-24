@@ -45,3 +45,11 @@ class EscalationRule:
     channel_id: int
     rule: str
     level: int
+
+
+@dataclass(frozen=True)
+class PostEvent:
+    id: int
+    channel_id: int
+    post_key: str
+    status: str
