@@ -172,6 +172,38 @@ class Storage:
             conn.commit()
         return added, skipped
 
+    def remove_accounts_from_grid(
+        self, chat_id: int, grid_name: str, account_names: list[str]
+    ) -> tuple[list[str], list[str]]:
+        removed: list[str] = []
+        skipped: list[str] = []
+        with self._connect() as conn:
+            grid = conn.execute(
+                "SELECT id FROM grids WHERE chat_id = ? AND name = ?",
+                (chat_id, grid_name),
+            ).fetchone()
+            if not grid:
+                return removed, account_names
+            grid_id = grid["id"]
+            for name in account_names:
+                account = conn.execute(
+                    "SELECT id FROM accounts WHERE chat_id = ? AND name = ?",
+                    (chat_id, name),
+                ).fetchone()
+                if not account:
+                    skipped.append(name)
+                    continue
+                cursor = conn.execute(
+                    "DELETE FROM grid_accounts WHERE grid_id = ? AND account_id = ?",
+                    (grid_id, account["id"]),
+                )
+                if cursor.rowcount > 0:
+                    removed.append(name)
+                else:
+                    skipped.append(name)
+            conn.commit()
+        return removed, skipped
+
     def resolve_accounts(self, chat_id: int, names: list[str]) -> tuple[list[str], list[str]]:
         existing = set(self.list_accounts(chat_id))
         found = [name for name in names if name in existing]

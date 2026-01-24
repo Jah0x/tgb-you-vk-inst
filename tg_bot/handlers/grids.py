@@ -7,7 +7,9 @@ from shared.config import Settings
 from shared.services import (
     add_accounts_to_grid,
     create_grid,
+    delete_grid,
     list_grids,
+    remove_accounts_from_grid,
     schedule_grid_run,
 )
 from shared.services.errors import ServiceError
@@ -19,6 +21,8 @@ GRIDS_HELP = (
     "Команды для сеток:\n"
     "• /grids create <grid_name> — создать новую сетку (админ)\n"
     "• /grids add-account <grid_name> <name1,name2|all> — добавить аккаунты в сетку (админ)\n"
+    "• /grids remove-account <grid_name> <name1,name2|all> — удалить аккаунты из сетки (админ)\n"
+    "• /grids delete <grid_name> — удалить сетку (админ)\n"
     "• /grids list — показать сетки и их аккаунты (админ/оператор)\n"
     "• /grids run <grid_name> <name1,name2|all> — запустить сетку (админ/оператор)\n"
     "\n"
@@ -97,6 +101,28 @@ def register_grids(dp: Dispatcher, store: Storage, settings: Settings) -> None:
             )
             return
 
+        if action == "delete":
+            if not await ensure_role(
+                message,
+                settings,
+                {Role.ADMIN},
+                "удаление сеток",
+            ):
+                return
+            if len(parts) < 3:
+                await message.answer("Формат: /grids delete <grid_name>\n" + GRIDS_HELP)
+                return
+
+            name = parts[2].strip()
+            try:
+                delete_grid(store, message.chat.id, name)
+            except ServiceError as exc:
+                await message.answer(_service_error_response(exc))
+                return
+
+            await message.answer(f"Сетка {name} удалена.")
+            return
+
         if action == "add-account":
             if not await ensure_role(
                 message,
@@ -125,6 +151,39 @@ def register_grids(dp: Dispatcher, store: Storage, settings: Settings) -> None:
                 response_lines.append("Добавлены: " + ", ".join(added))
             if skipped:
                 response_lines.append("Уже были в сетке: " + ", ".join(skipped))
+            await message.answer("\n".join(response_lines))
+            return
+
+        if action == "remove-account":
+            if not await ensure_role(
+                message,
+                settings,
+                {Role.ADMIN},
+                "удаление аккаунтов из сеток",
+            ):
+                return
+            if len(parts) < 4:
+                await message.answer(
+                    "Формат: /grids remove-account <grid_name> <name1,name2|all>\n"
+                    + GRIDS_HELP
+                )
+                return
+
+            grid_name = parts[2].strip()
+            try:
+                result = remove_accounts_from_grid(
+                    store, message.chat.id, grid_name, parts[3]
+                )
+            except ServiceError as exc:
+                await message.answer(_service_error_response(exc))
+                return
+
+            removed, skipped = result.removed, result.skipped
+            response_lines = []
+            if removed:
+                response_lines.append("Удалены из сетки: " + ", ".join(removed))
+            if skipped:
+                response_lines.append("Не были в сетке: " + ", ".join(skipped))
             await message.answer("\n".join(response_lines))
             return
 
