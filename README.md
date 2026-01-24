@@ -94,6 +94,15 @@ services:
       - redis
 ```
 
+## Переменные окружения по компонентам
+
+| Компонент | Обязательные | Опциональные (с дефолтами) |
+| --- | --- | --- |
+| bot | `BOT_TOKEN` | `REDIS_URL`, `RQ_QUEUE`, `DB_URL`, `ADMIN_CHAT_IDS`, `OPERATOR_CHAT_IDS` |
+| worker | `BOT_TOKEN` | `REDIS_URL`, `RQ_QUEUE`, `RQ_GRID_ACTIONS_QUEUE`, `RQ_POST_EVENTS_QUEUE`, `DB_URL`, `DATA_DIR`, `MAX_DURATION_SEC`, `MAX_FILESIZE_MB`, `INSTAGRAM_COOKIES_PATH`, `VK_COOKIES_PATH` |
+| api | — | `DB_URL` |
+| scheduler | — | `REDIS_URL`, `RQ_POST_EVENTS_QUEUE`, `DB_URL`, `SCHEDULER_POLL_SECONDS` |
+
 ## Деплой в Kubernetes
 
 1. Соберите образы (бот и воркер могут быть разными):

@@ -1,14 +1,51 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: tgb-config
+  name: tgb-bot-config
   labels:
     app: telegram-link-downloader
 data:
   REDIS_URL: "redis://redis:6379/0"
   RQ_QUEUE: "downloads"
+  DB_URL: "sqlite:////data/app.db"
+  ADMIN_CHAT_IDS: ""
+  OPERATOR_CHAT_IDS: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tgb-worker-config
+  labels:
+    app: telegram-link-downloader
+data:
+  REDIS_URL: "redis://redis:6379/0"
+  RQ_QUEUE: "downloads"
+  RQ_GRID_ACTIONS_QUEUE: "grid_actions"
+  RQ_POST_EVENTS_QUEUE: "post_events"
+  DB_URL: "sqlite:////data/app.db"
   DATA_DIR: "/data"
   MAX_DURATION_SEC: "180"
   MAX_FILESIZE_MB: "45"
   INSTAGRAM_COOKIES_PATH: ""
   VK_COOKIES_PATH: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tgb-api-config
+  labels:
+    app: telegram-link-downloader
+data:
+  DB_URL: "sqlite:////data/app.db"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tgb-scheduler-config
+  labels:
+    app: telegram-link-downloader
+data:
+  REDIS_URL: "redis://redis:6379/0"
+  RQ_POST_EVENTS_QUEUE: "post_events"
+  DB_URL: "sqlite:////data/app.db"
+  SCHEDULER_POLL_SECONDS: "30"

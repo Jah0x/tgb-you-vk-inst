@@ -20,7 +20,7 @@ spec:
           command: ["python", "-m", "api.main"]
           envFrom:
             - configMapRef:
-                name: tgb-config
+                name: tgb-api-config
             - secretRef:
                 name: tgb-secret
           ports:

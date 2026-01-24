@@ -20,7 +20,7 @@ spec:
           command: ["python", "-m", "worker.main"]
           envFrom:
             - configMapRef:
-                name: tgb-config
+                name: tgb-worker-config
             - secretRef:
                 name: tgb-secret
           volumeMounts:
