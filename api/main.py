@@ -11,12 +11,15 @@ from shared.config import load_settings
 from shared.services import (
     add_accounts,
     add_accounts_to_grid,
+    add_grid_action,
     create_grid,
     delete_account,
     delete_grid,
     list_accounts,
     list_grids,
+    list_grid_actions,
     remove_accounts_from_grid,
+    remove_grid_action,
     schedule_grid_run,
 )
 from shared.services.errors import ConflictError, NotFoundError, ServiceError, ValidationError
@@ -39,6 +42,10 @@ class GridCreateRequest(BaseModel):
 
 class GridAccountsRequest(BaseModel):
     accounts: str | list[str]
+
+
+class GridActionRequest(BaseModel):
+    action: str = Field(..., min_length=1)
 
 
 class AccountListResponseModel(BaseModel):
@@ -71,6 +78,14 @@ class GridAccountsResponseModel(BaseModel):
 class GridAccountsRemoveResponseModel(BaseModel):
     removed: list[str]
     skipped: list[str]
+
+
+class GridActionsResponseModel(BaseModel):
+    actions: list[str]
+
+
+class GridActionResponseModel(BaseModel):
+    action: str
 
 
 def _handle_service_error(exc: ServiceError) -> None:
@@ -177,6 +192,52 @@ def api_run_grid(
     except ServiceError as exc:
         _handle_service_error(exc)
     return {"accounts": result.accounts, "actions": result.actions}
+
+
+@app.get(
+    "/grids/{chat_id}/{grid_name}/actions", response_model=GridActionsResponseModel
+)
+def api_list_grid_actions(
+    chat_id: Annotated[int, Path(..., ge=1)],
+    grid_name: str,
+) -> GridActionsResponseModel:
+    try:
+        result = list_grid_actions(store, chat_id, grid_name)
+        return GridActionsResponseModel(**asdict(result))
+    except ServiceError as exc:
+        _handle_service_error(exc)
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@app.post(
+    "/grids/{chat_id}/{grid_name}/actions", response_model=GridActionResponseModel
+)
+def api_add_grid_action(
+    chat_id: Annotated[int, Path(..., ge=1)],
+    grid_name: str,
+    payload: GridActionRequest,
+) -> GridActionResponseModel:
+    try:
+        result = add_grid_action(store, chat_id, grid_name, payload.action)
+        return GridActionResponseModel(**asdict(result))
+    except ServiceError as exc:
+        _handle_service_error(exc)
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@app.delete(
+    "/grids/{chat_id}/{grid_name}/actions/{action}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def api_remove_grid_action(
+    chat_id: Annotated[int, Path(..., ge=1)],
+    grid_name: str,
+    action: str,
+) -> None:
+    try:
+        remove_grid_action(store, chat_id, grid_name, action)
+    except ServiceError as exc:
+        _handle_service_error(exc)
 
 
 @app.post(
