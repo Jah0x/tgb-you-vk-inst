@@ -35,6 +35,12 @@ class GridAccountsResponse:
 
 
 @dataclass(frozen=True)
+class GridAccountsRemoveResponse:
+    removed: list[str]
+    skipped: list[str]
+
+
+@dataclass(frozen=True)
 class GridRunResponse:
     accounts: list[str]
     actions: list[str]
@@ -135,6 +141,46 @@ def add_accounts_to_grid(
     accounts = _resolve_account_selection(store, chat_id, raw_accounts)
     added, skipped = store.add_accounts_to_grid(chat_id, grid_name, accounts)
     return GridAccountsResponse(added=added, skipped=skipped)
+
+
+def _resolve_grid_removal_selection(
+    store: Storage, chat_id: int, grid_name: str, raw_accounts: str
+) -> list[str]:
+    raw_accounts = raw_accounts.strip()
+    if raw_accounts.lower() == "all":
+        grid_accounts: list[str] = []
+        for name, accounts in store.list_grids(chat_id):
+            if name == grid_name:
+                grid_accounts = accounts
+                break
+        if not grid_accounts:
+            raise ValidationError(
+                "В сетке нет аккаунтов.",
+                ["Добавьте аккаунты командой /grids add-account."],
+            )
+        return grid_accounts
+
+    return _resolve_account_selection(store, chat_id, raw_accounts)
+
+
+def remove_accounts_from_grid(
+    store: Storage, chat_id: int, grid_name: str, raw_accounts: str
+) -> GridAccountsRemoveResponse:
+    invalid = validate_names([grid_name])
+    if invalid:
+        raise ValidationError(
+            "Некорректное имя сетки.",
+            ["Разрешены латиница, цифры и символы _ . -"],
+        )
+    if store.get_grid_id(chat_id, grid_name) is None:
+        raise NotFoundError(
+            f"Сетка {grid_name} не найдена.",
+            ["Создайте её командой /grids create."],
+        )
+
+    accounts = _resolve_grid_removal_selection(store, chat_id, grid_name, raw_accounts)
+    removed, skipped = store.remove_accounts_from_grid(chat_id, grid_name, accounts)
+    return GridAccountsRemoveResponse(removed=removed, skipped=skipped)
 
 
 def run_grid(
