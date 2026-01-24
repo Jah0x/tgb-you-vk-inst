@@ -21,6 +21,7 @@ from shared.services import (
     remove_accounts_from_grid,
     remove_grid_action,
     schedule_grid_run,
+    update_grid_action_materials,
 )
 from shared.services.grids import GridActionConfigPayload
 from shared.services.errors import ConflictError, NotFoundError, ServiceError, ValidationError
@@ -60,6 +61,10 @@ class GridActionConfigRequest(BaseModel):
 class GridActionRequest(BaseModel):
     action: str = Field(..., min_length=1)
     config: GridActionConfigRequest | None = None
+
+
+class GridActionMaterialsRequest(BaseModel):
+    payload: dict[str, object]
 
 
 class AccountListResponseModel(BaseModel):
@@ -224,6 +229,20 @@ def api_run_grid(
     return {"accounts": result.accounts, "actions": result.actions}
 
 
+@app.post("/grids/{chat_id}/{grid_name}/send")
+def api_send_grid(
+    chat_id: Annotated[int, Path(..., ge=1)],
+    grid_name: str,
+    payload: GridAccountsRequest,
+) -> dict[str, list[str]]:
+    raw_accounts = _format_accounts_payload(payload)
+    try:
+        result = schedule_grid_run(store, settings, chat_id, grid_name, raw_accounts)
+    except ServiceError as exc:
+        _handle_service_error(exc)
+    return {"accounts": result.accounts, "actions": result.actions}
+
+
 @app.get(
     "/grids/{chat_id}/{grid_name}/actions", response_model=GridActionsResponseModel
 )
@@ -277,6 +296,30 @@ def api_add_grid_action(
             grid_name,
             payload.action,
             config=config_payload,
+        )
+        return GridActionResponseModel(**asdict(result))
+    except ServiceError as exc:
+        _handle_service_error(exc)
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@app.post(
+    "/grids/{chat_id}/{grid_name}/actions/{action}/materials",
+    response_model=GridActionResponseModel,
+)
+def api_update_grid_action_materials(
+    chat_id: Annotated[int, Path(..., ge=1)],
+    grid_name: str,
+    action: str,
+    payload: GridActionMaterialsRequest,
+) -> GridActionResponseModel:
+    try:
+        result = update_grid_action_materials(
+            store,
+            chat_id,
+            grid_name,
+            action,
+            payload=payload.payload,
         )
         return GridActionResponseModel(**asdict(result))
     except ServiceError as exc:

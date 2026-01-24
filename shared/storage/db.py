@@ -182,6 +182,54 @@ class Storage:
             results.append((action, config))
         return results
 
+    def get_grid_action_with_config(
+        self, chat_id: int, grid_name: str, action: str
+    ) -> tuple[GridAction, GridActionConfig | None] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    ga.id AS action_id,
+                    ga.grid_id AS grid_id,
+                    ga.action AS action,
+                    gac.id AS config_id,
+                    gac.type AS config_type,
+                    gac.payload_json AS payload_json,
+                    gac.min_delay_s AS min_delay_s,
+                    gac.max_delay_s AS max_delay_s,
+                    gac.random_jitter_enabled AS random_jitter_enabled,
+                    gac.account_selector AS account_selector,
+                    gac.account_allocation AS account_allocation,
+                    gac.account_allocation_value AS account_allocation_value
+                FROM grid_actions ga
+                JOIN grids g ON g.id = ga.grid_id
+                LEFT JOIN grid_action_configs gac ON gac.grid_action_id = ga.id
+                WHERE g.chat_id = ? AND g.name = ? AND ga.action = ?
+                """,
+                (chat_id, grid_name, action),
+            ).fetchone()
+        if row is None:
+            return None
+        grid_action = GridAction(
+            id=row["action_id"], grid_id=row["grid_id"], action=row["action"]
+        )
+        if row["config_id"] is None:
+            config = None
+        else:
+            config = GridActionConfig(
+                id=row["config_id"],
+                grid_action_id=row["action_id"],
+                type=row["config_type"],
+                payload_json=row["payload_json"],
+                min_delay_s=row["min_delay_s"],
+                max_delay_s=row["max_delay_s"],
+                random_jitter_enabled=bool(row["random_jitter_enabled"]),
+                account_selector=row["account_selector"],
+                account_allocation=row["account_allocation"],
+                account_allocation_value=row["account_allocation_value"],
+            )
+        return grid_action, config
+
     def add_grid_action(self, chat_id: int, grid_name: str, action: str) -> int | None:
         with self._connect() as conn:
             grid = conn.execute(

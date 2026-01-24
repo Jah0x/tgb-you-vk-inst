@@ -12,13 +12,25 @@ def apply_grid_action(payload: str) -> None:
         chat_id = data["chat_id"]
         accounts = data.get("accounts") or []
         action = data["action"]
-        logging.info(
-            "Grid action: grid_name=%s chat_id=%s accounts=%s action=%s",
-            grid_name,
-            chat_id,
-            accounts,
-            action,
-        )
+        config = data.get("config") or {}
+        if action in {"spam_post", "spam_comment", "spam_message"}:
+            payload_data = config.get("payload") or {}
+            logging.info(
+                "Grid spam action: grid_name=%s chat_id=%s accounts=%s action=%s payload=%s",
+                grid_name,
+                chat_id,
+                accounts,
+                action,
+                payload_data,
+            )
+        else:
+            logging.info(
+                "Grid action: grid_name=%s chat_id=%s accounts=%s action=%s",
+                grid_name,
+                chat_id,
+                accounts,
+                action,
+            )
         return
 
     channel_id = data["channel_id"]
