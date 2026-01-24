@@ -20,7 +20,7 @@ spec:
           command: ["python", "-m", "worker.scheduler"]
           envFrom:
             - configMapRef:
-                name: tgb-config
+                name: tgb-scheduler-config
             - secretRef:
                 name: tgb-secret
           volumeMounts:
