@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 from urllib.parse import urlparse
 
-from shared.models import EscalationRule, PostEvent, ScheduleRule
+from shared.models import EscalationRule, GridAction, PostEvent, ScheduleRule
 from shared.storage.schema import SCHEMA_STATEMENTS
 
 
@@ -114,6 +114,23 @@ class Storage:
                 ).fetchall()
                 result.append((grid["name"], [row["name"] for row in accounts]))
         return result
+
+    def list_grid_actions(self, chat_id: int, grid_name: str) -> list[GridAction]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT ga.id, ga.grid_id, ga.action
+                FROM grid_actions ga
+                JOIN grids g ON g.id = ga.grid_id
+                WHERE g.chat_id = ? AND g.name = ?
+                ORDER BY ga.id
+                """,
+                (chat_id, grid_name),
+            ).fetchall()
+        return [
+            GridAction(id=row["id"], grid_id=row["grid_id"], action=row["action"])
+            for row in rows
+        ]
 
     def get_grid_id(self, chat_id: int, name: str) -> int | None:
         with self._connect() as conn:

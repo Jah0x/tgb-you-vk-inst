@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
+from redis import Redis
+from rq import Queue
+
+from shared.config import Settings
 from shared.services.errors import ConflictError, NotFoundError, ValidationError
 from shared.services.utils import parse_name_list, validate_names
 from shared.storage import Storage
@@ -27,6 +32,13 @@ class GridCreateResponse:
 class GridAccountsResponse:
     added: list[str]
     skipped: list[str]
+
+
+@dataclass(frozen=True)
+class GridRunResponse:
+    accounts: list[str]
+    actions: list[str]
+    queued_jobs: int
 
 
 def list_grids(store: Storage, chat_id: int) -> GridListResponse:
@@ -126,8 +138,12 @@ def add_accounts_to_grid(
 
 
 def run_grid(
-    store: Storage, chat_id: int, grid_name: str, raw_accounts: str
-) -> list[str]:
+    store: Storage,
+    settings: Settings,
+    chat_id: int,
+    grid_name: str,
+    raw_accounts: str,
+) -> GridRunResponse:
     invalid = validate_names([grid_name])
     if invalid:
         raise ValidationError(
@@ -140,4 +156,43 @@ def run_grid(
             ["Создайте её командой /grids create."],
         )
 
-    return _resolve_account_selection(store, chat_id, raw_accounts)
+    accounts = _resolve_account_selection(store, chat_id, raw_accounts)
+    actions = store.list_grid_actions(chat_id, grid_name)
+    if not actions:
+        raise ValidationError(
+            "Для сетки не настроены действия.",
+            ["Добавьте действия для сетки перед запуском."],
+        )
+
+    redis_conn = Redis.from_url(settings.redis_url)
+    grid_queue = Queue(settings.rq_grid_actions_queue, connection=redis_conn)
+    action_names = [action.action for action in actions]
+    for action in action_names:
+        payload = json.dumps(
+            {
+                "grid_name": grid_name,
+                "chat_id": chat_id,
+                "accounts": accounts,
+                "action": action,
+            }
+        )
+        grid_queue.enqueue(
+            "worker.tasks.grid_actions.apply_grid_action",
+            payload,
+        )
+
+    return GridRunResponse(
+        accounts=accounts,
+        actions=action_names,
+        queued_jobs=len(action_names),
+    )
+
+
+def schedule_grid_run(
+    store: Storage,
+    settings: Settings,
+    chat_id: int,
+    grid_name: str,
+    raw_accounts: str,
+) -> GridRunResponse:
+    return run_grid(store, settings, chat_id, grid_name, raw_accounts)

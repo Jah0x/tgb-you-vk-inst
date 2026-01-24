@@ -16,7 +16,7 @@ from shared.services import (
     delete_grid,
     list_accounts,
     list_grids,
-    run_grid,
+    schedule_grid_run,
 )
 from shared.services.errors import ConflictError, NotFoundError, ServiceError, ValidationError
 from shared.storage import Storage, init_db
@@ -167,7 +167,7 @@ def api_run_grid(
 ) -> dict[str, list[str]]:
     raw_accounts = _format_accounts_payload(payload)
     try:
-        accounts = run_grid(store, chat_id, grid_name, raw_accounts)
+        result = schedule_grid_run(store, settings, chat_id, grid_name, raw_accounts)
     except ServiceError as exc:
         _handle_service_error(exc)
-    return {"accounts": accounts}
+    return {"accounts": result.accounts, "actions": result.actions}

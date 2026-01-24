@@ -12,11 +12,13 @@ from shared.services.grids import (
     GridCreateResponse,
     GridInfo,
     GridListResponse,
+    GridRunResponse,
     add_accounts_to_grid,
     create_grid,
     delete_grid,
     list_grids,
     run_grid,
+    schedule_grid_run,
 )
 from shared.services.schedule import ScheduleRuleList, get_schedule_state, list_active_rules, update_schedule_state
 
@@ -28,6 +30,7 @@ __all__ = [
     "GridCreateResponse",
     "GridInfo",
     "GridListResponse",
+    "GridRunResponse",
     "ScheduleRuleList",
     "ServiceError",
     "ConflictError",
@@ -46,5 +49,6 @@ __all__ = [
     "list_pending_post_events",
     "mark_post_event_processed",
     "run_grid",
+    "schedule_grid_run",
     "update_schedule_state",
 ]
