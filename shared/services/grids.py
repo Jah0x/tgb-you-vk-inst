@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import Any
 
 from redis import Redis
 from rq import Queue
@@ -10,6 +11,7 @@ from shared.config import Settings
 from shared.services.errors import ConflictError, NotFoundError, ValidationError
 from shared.services.utils import parse_name_list, validate_names
 from shared.storage import Storage
+from shared.models import GridActionConfig
 
 
 @dataclass(frozen=True)
@@ -49,12 +51,45 @@ class GridRunResponse:
 
 @dataclass(frozen=True)
 class GridActionsResponse:
-    actions: list[str]
+    actions: list["GridActionInfo"]
+
+
+@dataclass(frozen=True)
+class GridActionConfigPayload:
+    type: str | None
+    payload: dict[str, Any] | None
+    min_delay_s: int | None
+    max_delay_s: int | None
+    random_jitter_enabled: bool | None
+    account_selector: str | None
+
+
+@dataclass(frozen=True)
+class GridActionConfigInfo:
+    type: str
+    payload: dict[str, Any] | None
+    min_delay_s: int | None
+    max_delay_s: int | None
+    random_jitter_enabled: bool
+    account_selector: str | None
+
+
+@dataclass(frozen=True)
+class GridActionInfo:
+    action: str
+    config: GridActionConfigInfo | None
 
 
 @dataclass(frozen=True)
 class GridActionResponse:
-    action: str
+    action: GridActionInfo
+
+
+ALLOWED_GRID_ACTION_TYPES = {"reaction", "comment"}
+ACTION_PAYLOAD_FIELDS = {
+    "reaction": {"count"},
+    "comment": {"text"},
+}
 
 
 def list_grids(store: Storage, chat_id: int) -> GridListResponse:
@@ -103,12 +138,19 @@ def list_grid_actions(store: Storage, chat_id: int, grid_name: str) -> GridActio
             f"Сетка {grid_name} не найдена.",
             ["Создайте её командой /grids create."],
         )
-    actions = [action.action for action in store.list_grid_actions(chat_id, grid_name)]
+    actions = []
+    for action, config in store.list_grid_actions_with_configs(chat_id, grid_name):
+        config_info = _format_action_config_info(config)
+        actions.append(GridActionInfo(action=action.action, config=config_info))
     return GridActionsResponse(actions=actions)
 
 
 def add_grid_action(
-    store: Storage, chat_id: int, grid_name: str, action: str
+    store: Storage,
+    chat_id: int,
+    grid_name: str,
+    action: str,
+    config: GridActionConfigPayload | None = None,
 ) -> GridActionResponse:
     invalid = validate_names([grid_name, action])
     if invalid:
@@ -121,12 +163,26 @@ def add_grid_action(
             f"Сетка {grid_name} не найдена.",
             ["Создайте её командой /grids create."],
         )
-    if not store.add_grid_action(chat_id, grid_name, action):
+    grid_action_id = store.add_grid_action(chat_id, grid_name, action)
+    if grid_action_id is None:
         raise ConflictError(
             "Действие уже добавлено.",
             [f"Действие {action} уже есть в сетке {grid_name}."],
         )
-    return GridActionResponse(action=action)
+    config_info = _validate_grid_action_config(action, config)
+    if config_info:
+        store.upsert_grid_action_config(
+            grid_action_id=grid_action_id,
+            action_type=config_info.type,
+            payload_json=json.dumps(config_info.payload) if config_info.payload else None,
+            min_delay_s=config_info.min_delay_s,
+            max_delay_s=config_info.max_delay_s,
+            random_jitter_enabled=config_info.random_jitter_enabled,
+            account_selector=config_info.account_selector,
+        )
+    return GridActionResponse(
+        action=GridActionInfo(action=action, config=config_info)
+    )
 
 
 def remove_grid_action(store: Storage, chat_id: int, grid_name: str, action: str) -> None:
@@ -146,6 +202,131 @@ def remove_grid_action(store: Storage, chat_id: int, grid_name: str, action: str
             "Действие не найдено.",
             [f"Действие {action} не найдено в сетке {grid_name}."],
         )
+
+
+def _format_action_config_info(
+    config: GridActionConfig | None,
+) -> GridActionConfigInfo | None:
+    if config is None:
+        return None
+    payload: dict[str, Any] | None
+    if config.payload_json:
+        payload = json.loads(config.payload_json)
+    else:
+        payload = None
+    return GridActionConfigInfo(
+        type=config.type,
+        payload=payload,
+        min_delay_s=config.min_delay_s,
+        max_delay_s=config.max_delay_s,
+        random_jitter_enabled=config.random_jitter_enabled,
+        account_selector=config.account_selector,
+    )
+
+
+def _validate_grid_action_config(
+    action: str, config: GridActionConfigPayload | None
+) -> GridActionConfigInfo | None:
+    if config is None:
+        return None
+
+    action_type = (config.type or action).strip().lower()
+    if action_type not in ALLOWED_GRID_ACTION_TYPES:
+        raise ValidationError(
+            "Некорректный тип действия.",
+            [
+                "Допустимые типы: " + ", ".join(sorted(ALLOWED_GRID_ACTION_TYPES)),
+            ],
+        )
+
+    payload = config.payload or {}
+    if not isinstance(payload, dict):
+        raise ValidationError(
+            "Некорректные параметры действия.",
+            ["Payload должен быть объектом."],
+        )
+    allowed_fields = ACTION_PAYLOAD_FIELDS.get(action_type, set())
+    unknown_fields = [key for key in payload.keys() if key not in allowed_fields]
+    if unknown_fields:
+        raise ValidationError(
+            "Некорректные параметры действия.",
+            [
+                "Неизвестные параметры: " + ", ".join(sorted(unknown_fields)),
+            ],
+        )
+    if "count" in payload:
+        count = payload["count"]
+        if not isinstance(count, int) or count <= 0:
+            raise ValidationError(
+                "Некорректный параметр count.",
+                ["count должен быть положительным числом."],
+            )
+    if "text" in payload:
+        text = payload["text"]
+        if not isinstance(text, str) or not text.strip():
+            raise ValidationError(
+                "Некорректный параметр text.",
+                ["text должен быть непустой строкой."],
+            )
+
+    min_delay_s = config.min_delay_s
+    max_delay_s = config.max_delay_s
+    if (min_delay_s is None) != (max_delay_s is None):
+        raise ValidationError(
+            "Некорректные интервалы.",
+            ["Укажите оба значения: min и max."],
+        )
+    if min_delay_s is not None and max_delay_s is not None:
+        if min_delay_s < 0 or max_delay_s < 0:
+            raise ValidationError(
+                "Некорректные интервалы.",
+                ["Интервалы должны быть неотрицательными."],
+            )
+        if min_delay_s > max_delay_s:
+            raise ValidationError(
+                "Некорректные интервалы.",
+                ["min не может быть больше max."],
+            )
+
+    random_jitter_enabled = bool(config.random_jitter_enabled)
+    if random_jitter_enabled and (min_delay_s is None or max_delay_s is None):
+        raise ValidationError(
+            "Некорректный jitter.",
+            ["Для jitter укажите min и max."],
+        )
+
+    account_selector = config.account_selector
+    if account_selector:
+        selector = account_selector.strip()
+        if selector.lower() != "all":
+            names = parse_name_list(selector)
+            if not names:
+                raise ValidationError(
+                    "Некорректный выбор аккаунтов.",
+                    ["Укажите список аккаунтов или all."],
+                )
+            invalid_names = validate_names(names)
+            if invalid_names:
+                raise ValidationError(
+                    "Некорректные имена аккаунтов.",
+                    [
+                        "Некорректные имена аккаунтов: " + ", ".join(invalid_names),
+                        "Используйте латиницу, цифры и символы _ . -",
+                    ],
+                )
+            account_selector = ",".join(names)
+        else:
+            account_selector = "all"
+
+    payload_value = payload or None
+    return GridActionConfigInfo(
+        type=action_type,
+        payload=payload_value,
+        min_delay_s=min_delay_s,
+        max_delay_s=max_delay_s,
+        random_jitter_enabled=random_jitter_enabled,
+        account_selector=account_selector,
+    )
 
 
 def _resolve_account_selection(
