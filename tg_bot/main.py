@@ -15,7 +15,7 @@ from shared.providers import vk as _vk_provider  # noqa: F401
 from shared.providers import youtube as _youtube_provider  # noqa: F401
 from shared.router.detector import detect
 from tg_bot.handlers import register_handlers
-from tg_bot.store import BotStore
+from shared.storage import Storage, init_db
 
 
 async def handle_message(message: Message, queue: Queue) -> None:
@@ -54,7 +54,8 @@ async def main() -> None:
     bot = Bot(token=settings.bot_token)
     dp = Dispatcher()
 
-    store = BotStore()
+    init_db(settings.db_url)
+    store = Storage(settings.db_url)
     register_handlers(dp, store)
 
     @dp.message(F.text & ~F.text.startswith("/"))

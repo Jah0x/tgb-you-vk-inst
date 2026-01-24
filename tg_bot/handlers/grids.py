@@ -4,7 +4,7 @@ from aiogram import Dispatcher, F
 from aiogram.types import Message
 
 from tg_bot.handlers.utils import format_accounts, parse_name_list, validate_names
-from tg_bot.store import BotStore
+from shared.storage import Storage
 
 GRIDS_HELP = (
     "Команды для сеток:\n"
@@ -17,7 +17,7 @@ GRIDS_HELP = (
 )
 
 
-async def _respond_with_grids(message: Message, store: BotStore) -> None:
+async def _respond_with_grids(message: Message, store: Storage) -> None:
     grids = store.list_grids(message.chat.id)
     if not grids:
         await message.answer(
@@ -26,17 +26,17 @@ async def _respond_with_grids(message: Message, store: BotStore) -> None:
         return
 
     lines = ["Ваши сетки:"]
-    for grid in grids:
-        lines.append(f"• {grid.name}")
-        if grid.account_names:
-            lines.append("  " + format_accounts(grid.account_names).replace("\n", "\n  "))
+    for grid_name, account_names in grids:
+        lines.append(f"• {grid_name}")
+        if account_names:
+            lines.append("  " + format_accounts(account_names).replace("\n", "\n  "))
         else:
             lines.append("  (пока нет аккаунтов)")
     await message.answer("\n".join(lines))
 
 
 def _resolve_account_selection(
-    message: Message, store: BotStore, raw: str
+    message: Message, store: Storage, raw: str
 ) -> tuple[list[str], list[str] | None]:
     raw = raw.strip()
     if raw.lower() == "all":
@@ -67,7 +67,7 @@ def _resolve_account_selection(
     return found, None
 
 
-def register_grids(dp: Dispatcher, store: BotStore) -> None:
+def register_grids(dp: Dispatcher, store: Storage) -> None:
     @dp.message(F.text.startswith("/grids"))
     async def _grids_handler(message: Message) -> None:
         if not message.text:
@@ -127,8 +127,7 @@ def register_grids(dp: Dispatcher, store: BotStore) -> None:
                 )
                 return
 
-            grid = store.get_grid(message.chat.id, grid_name)
-            if not grid:
+            if store.get_grid_id(message.chat.id, grid_name) is None:
                 await message.answer(
                     f"Сетка {grid_name} не найдена. Создайте её командой /grids create."
                 )
@@ -166,8 +165,7 @@ def register_grids(dp: Dispatcher, store: BotStore) -> None:
                 )
                 return
 
-            grid = store.get_grid(message.chat.id, grid_name)
-            if not grid:
+            if store.get_grid_id(message.chat.id, grid_name) is None:
                 await message.answer(
                     f"Сетка {grid_name} не найдена. Создайте её командой /grids create."
                 )

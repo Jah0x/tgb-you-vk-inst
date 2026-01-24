@@ -4,7 +4,7 @@ from aiogram import Dispatcher, F
 from aiogram.types import Message
 
 from tg_bot.handlers.utils import format_accounts, parse_name_list, validate_names
-from tg_bot.store import BotStore
+from shared.storage import Storage
 
 ACCOUNTS_HELP = (
     "Команды для аккаунтов:\n"
@@ -15,7 +15,7 @@ ACCOUNTS_HELP = (
 )
 
 
-def register_accounts(dp: Dispatcher, store: BotStore) -> None:
+def register_accounts(dp: Dispatcher, store: Storage) -> None:
     @dp.message(F.text.startswith("/accounts"))
     async def _accounts_handler(message: Message) -> None:
         if not message.text:
