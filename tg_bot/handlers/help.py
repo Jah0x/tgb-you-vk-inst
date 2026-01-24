@@ -4,6 +4,7 @@ from aiogram import Dispatcher, F
 from aiogram.types import Message
 
 from tg_bot.handlers.accounts import ACCOUNTS_HELP
+from tg_bot.handlers.complaints import COMPLAINTS_HELP
 from tg_bot.handlers.comments import COMMENTS_HELP
 from tg_bot.handlers.grids import GRIDS_HELP
 
@@ -19,12 +20,15 @@ HELP_TEXT = (
     "Доступные команды:\n"
     "/accounts — управление аккаунтами\n"
     "/comments — управление комментариями\n"
+    "/complaints — управление жалобами\n"
     "/grids — управление сетками\n"
     "/help — справка\n"
     "\n"
     + ACCOUNTS_HELP
     + "\n\n"
     + COMMENTS_HELP
+    + "\n\n"
+    + COMPLAINTS_HELP
     + "\n\n"
     + GRIDS_HELP
     + "\n\n"

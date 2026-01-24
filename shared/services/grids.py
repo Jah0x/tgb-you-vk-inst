@@ -92,11 +92,13 @@ class GridActionResponse:
 
 
 SPAM_ACTION_TYPES = {"spam_post", "spam_comment", "spam_message"}
-ALLOWED_GRID_ACTION_TYPES = {"reaction", "comment", *SPAM_ACTION_TYPES}
+COMPLAINT_REASONS = {"spam", "fraud", "violence", "adult", "other"}
+ALLOWED_GRID_ACTION_TYPES = {"reaction", "comment", "complaint", *SPAM_ACTION_TYPES}
 SPAM_PAYLOAD_FIELDS = {"files", "text", "album_url", "text_template", "random_variants"}
 ACTION_PAYLOAD_FIELDS = {
     "reaction": {"count"},
     "comment": {"text"},
+    "complaint": {"reason", "target", "selection", "timers", "delay"},
     "spam_post": SPAM_PAYLOAD_FIELDS,
     "spam_comment": SPAM_PAYLOAD_FIELDS,
     "spam_message": SPAM_PAYLOAD_FIELDS,
@@ -356,6 +358,85 @@ def _validate_spam_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _validate_complaint_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    reason = normalized.get("reason")
+    if reason is None:
+        raise ValidationError(
+            "Некорректный параметр reason.",
+            ["reason обязателен для жалобы."],
+        )
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValidationError(
+            "Некорректный параметр reason.",
+            ["reason должен быть непустой строкой."],
+        )
+    reason_value = reason.strip().lower()
+    if reason_value not in COMPLAINT_REASONS:
+        raise ValidationError(
+            "Некорректный параметр reason.",
+            ["Допустимые причины: " + ", ".join(sorted(COMPLAINT_REASONS))],
+        )
+    normalized["reason"] = reason_value
+
+    selection = normalized.get("selection")
+    if selection is not None:
+        if not isinstance(selection, str) or not selection.strip():
+            raise ValidationError(
+                "Некорректный параметр selection.",
+                ["selection должен быть строкой."],
+            )
+        selection_value = selection.strip().lower()
+        if selection_value not in {"latest", "explicit"}:
+            raise ValidationError(
+                "Некорректный параметр selection.",
+                ["Используйте latest или explicit."],
+            )
+        normalized["selection"] = selection_value
+    else:
+        selection_value = None
+
+    target = normalized.get("target")
+    if target is not None:
+        if not isinstance(target, str) or not target.strip():
+            raise ValidationError(
+                "Некорректный параметр target.",
+                ["target должен быть непустой строкой."],
+            )
+        normalized["target"] = target.strip()
+
+    if selection_value == "explicit" and not normalized.get("target"):
+        raise ValidationError(
+            "Некорректный параметр target.",
+            ["Для selection=explicit укажите target."],
+        )
+
+    if "timers" in normalized:
+        normalized["timers"] = _normalize_list_field(normalized["timers"], "timers")
+
+    if "delay" in normalized:
+        delay = normalized["delay"]
+        if isinstance(delay, int):
+            if delay < 0:
+                raise ValidationError(
+                    "Некорректный параметр delay.",
+                    ["delay должен быть неотрицательным числом."],
+                )
+        elif isinstance(delay, str):
+            if not delay.strip():
+                raise ValidationError(
+                    "Некорректный параметр delay.",
+                    ["delay должен быть непустой строкой."],
+                )
+            normalized["delay"] = delay.strip()
+        else:
+            raise ValidationError(
+                "Некорректный параметр delay.",
+                ["delay должен быть строкой или числом."],
+            )
+    return normalized
+
+
 def _validate_grid_action_config(
     action: str, config: GridActionConfigPayload | None
 ) -> GridActionConfigInfo | None:
@@ -388,6 +469,8 @@ def _validate_grid_action_config(
         )
     if action_type in SPAM_ACTION_TYPES:
         payload = _validate_spam_payload(payload)
+    if action_type == "complaint":
+        payload = _validate_complaint_payload(payload)
     if "count" in payload:
         count = payload["count"]
         if not isinstance(count, int) or count <= 0:

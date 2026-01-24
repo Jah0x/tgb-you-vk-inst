@@ -23,6 +23,15 @@ def apply_grid_action(payload: str) -> None:
                 action,
                 payload_data,
             )
+        elif action == "complaint":
+            payload_data = config.get("payload") or {}
+            logging.info(
+                "Grid complaint action: grid_name=%s chat_id=%s accounts=%s payload=%s",
+                grid_name,
+                chat_id,
+                accounts,
+                payload_data,
+            )
         else:
             logging.info(
                 "Grid action: grid_name=%s chat_id=%s accounts=%s action=%s",
@@ -37,10 +46,18 @@ def apply_grid_action(payload: str) -> None:
     post_key = data["post_key"]
     action = data["action"]
     metadata = data.get("metadata") or {}
-    logging.info(
-        "Grid action: channel_id=%s post_key=%s action=%s metadata=%s",
-        channel_id,
-        post_key,
-        action,
-        metadata,
-    )
+    if action == "complaint":
+        logging.info(
+            "Grid complaint action: channel_id=%s post_key=%s metadata=%s",
+            channel_id,
+            post_key,
+            metadata,
+        )
+    else:
+        logging.info(
+            "Grid action: channel_id=%s post_key=%s action=%s metadata=%s",
+            channel_id,
+            post_key,
+            action,
+            metadata,
+        )
