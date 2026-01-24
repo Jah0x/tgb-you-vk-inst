@@ -91,10 +91,15 @@ class GridActionResponse:
     action: GridActionInfo
 
 
-ALLOWED_GRID_ACTION_TYPES = {"reaction", "comment"}
+SPAM_ACTION_TYPES = {"spam_post", "spam_comment", "spam_message"}
+ALLOWED_GRID_ACTION_TYPES = {"reaction", "comment", *SPAM_ACTION_TYPES}
+SPAM_PAYLOAD_FIELDS = {"files", "text", "album_url", "text_template", "random_variants"}
 ACTION_PAYLOAD_FIELDS = {
     "reaction": {"count"},
     "comment": {"text"},
+    "spam_post": SPAM_PAYLOAD_FIELDS,
+    "spam_comment": SPAM_PAYLOAD_FIELDS,
+    "spam_message": SPAM_PAYLOAD_FIELDS,
 }
 
 
@@ -193,6 +198,63 @@ def add_grid_action(
     )
 
 
+def update_grid_action_materials(
+    store: Storage,
+    chat_id: int,
+    grid_name: str,
+    action: str,
+    payload: dict[str, Any],
+) -> GridActionResponse:
+    invalid = validate_names([grid_name, action])
+    if invalid:
+        raise ValidationError(
+            "Некорректные значения.",
+            ["Разрешены латиница, цифры и символы _ . -"],
+        )
+    if store.get_grid_id(chat_id, grid_name) is None:
+        raise NotFoundError(
+            f"Сетка {grid_name} не найдена.",
+            ["Создайте её командой /grids create."],
+        )
+    action_entry = store.get_grid_action_with_config(chat_id, grid_name, action)
+    if action_entry is None:
+        raise NotFoundError(
+            "Действие не найдено.",
+            [f"Действие {action} не найдено в сетке {grid_name}."],
+        )
+    grid_action, existing_config = action_entry
+    config_payload = GridActionConfigPayload(
+        type=existing_config.type if existing_config else action,
+        payload=payload,
+        min_delay_s=existing_config.min_delay_s if existing_config else None,
+        max_delay_s=existing_config.max_delay_s if existing_config else None,
+        random_jitter_enabled=existing_config.random_jitter_enabled if existing_config else False,
+        account_selector=existing_config.account_selector if existing_config else None,
+        account_allocation=existing_config.account_allocation if existing_config else None,
+        account_allocation_value=existing_config.account_allocation_value if existing_config else None,
+    )
+    config_info = _validate_grid_action_config(action, config_payload)
+    if config_info is None:
+        raise ValidationError(
+            "Некорректные параметры действия.",
+            ["Payload должен быть объектом."],
+        )
+    store.upsert_grid_action_config(
+        grid_action_id=grid_action.id,
+        action_type=config_info.type,
+        payload_json=json.dumps(config_info.payload) if config_info.payload else None,
+        min_delay_s=config_info.min_delay_s,
+        max_delay_s=config_info.max_delay_s,
+        random_jitter_enabled=config_info.random_jitter_enabled,
+        account_selector=config_info.account_selector,
+        account_allocation=config_info.account_allocation,
+        account_allocation_value=config_info.account_allocation_value,
+    )
+    return GridActionResponse(
+        action=GridActionInfo(action=action, config=config_info)
+    )
+
+
 def remove_grid_action(store: Storage, chat_id: int, grid_name: str, action: str) -> None:
     invalid = validate_names([grid_name, action])
     if invalid:
@@ -234,6 +296,66 @@ def _format_action_config_info(
     )
 
 
+def _normalize_list_field(value: object, field_name: str) -> list[str]:
+    if isinstance(value, list):
+        cleaned = [item.strip() for item in value if isinstance(item, str) and item.strip()]
+        if len(cleaned) != len(value):
+            raise ValidationError(
+                f"Некорректный параметр {field_name}.",
+                [f"{field_name} должен быть списком строк."],
+            )
+        return cleaned
+    if isinstance(value, str):
+        split_values = [
+            item.strip() for item in value.replace("|", ",").split(",") if item.strip()
+        ]
+        if not split_values:
+            raise ValidationError(
+                f"Некорректный параметр {field_name}.",
+                [f"{field_name} должен содержать хотя бы одно значение."],
+            )
+        return split_values
+    raise ValidationError(
+        f"Некорректный параметр {field_name}.",
+        [f"{field_name} должен быть строкой или списком строк."],
+    )
+
+
+def _validate_spam_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    if "files" in normalized:
+        normalized["files"] = _normalize_list_field(normalized["files"], "files")
+    if "random_variants" in normalized:
+        normalized["random_variants"] = _normalize_list_field(
+            normalized["random_variants"], "random_variants"
+        )
+    if "text" in normalized:
+        text = normalized["text"]
+        if not isinstance(text, str) or not text.strip():
+            raise ValidationError(
+                "Некорректный параметр text.",
+                ["text должен быть непустой строкой."],
+            )
+        normalized["text"] = text.strip()
+    if "text_template" in normalized:
+        text_template = normalized["text_template"]
+        if not isinstance(text_template, str) or not text_template.strip():
+            raise ValidationError(
+                "Некорректный параметр text_template.",
+                ["text_template должен быть непустой строкой."],
+            )
+        normalized["text_template"] = text_template.strip()
+    if "album_url" in normalized:
+        album_url = normalized["album_url"]
+        if not isinstance(album_url, str) or not album_url.strip():
+            raise ValidationError(
+                "Некорректный параметр album_url.",
+                ["album_url должен быть непустой строкой."],
+            )
+        normalized["album_url"] = album_url.strip()
+    return normalized
+
+
 def _validate_grid_action_config(
     action: str, config: GridActionConfigPayload | None
 ) -> GridActionConfigInfo | None:
@@ -264,6 +386,8 @@ def _validate_grid_action_config(
                 "Неизвестные параметры: " + ", ".join(sorted(unknown_fields)),
             ],
         )
+    if action_type in SPAM_ACTION_TYPES:
+        payload = _validate_spam_payload(payload)
     if "count" in payload:
         count = payload["count"]
         if not isinstance(count, int) or count <= 0:
@@ -611,12 +735,24 @@ def run_grid(
         )
         if not assigned_accounts:
             continue
+        config_payload: dict[str, Any] | None = None
+        if config and config.payload_json:
+            try:
+                config_payload = json.loads(config.payload_json)
+            except json.JSONDecodeError:
+                config_payload = None
         payload = json.dumps(
             {
                 "grid_name": grid_name,
                 "chat_id": chat_id,
                 "accounts": assigned_accounts,
                 "action": action.action,
+                "config": {
+                    "type": config.type if config else None,
+                    "payload": config_payload,
+                }
+                if config
+                else None,
             }
         )
         delay_seconds = _resolve_grid_action_delay_seconds(config)

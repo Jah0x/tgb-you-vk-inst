@@ -17,6 +17,7 @@ from shared.services import (
     remove_accounts_from_grid,
     remove_grid_action,
     schedule_grid_run,
+    update_grid_action_materials,
 )
 from shared.services.grids import GridActionConfigPayload
 from shared.services.errors import ServiceError
@@ -33,11 +34,16 @@ GRIDS_HELP = (
     "[--delay=SEC] [--min=SEC] [--max=SEC] [--account=all|name1,name2] "
     "[--alloc-count=N|--alloc-percent=N|--alloc-accounts=name1,name2]\n"
     "  — добавить действие для сетки (админ)\n"
+    "• /grids set-materials <grid_name> <action> "
+    "[--text=TEXT] [--file=PATH1,PATH2] [--album=URL] "
+    "[--template=TEXT] [--variants=TEXT1|TEXT2]\n"
+    "  — привязать материалы к действию (админ)\n"
     "• /grids remove-action <grid_name> <action> — удалить действие из сетки (админ)\n"
     "• /grids delete <grid_name> — удалить сетку (админ)\n"
     "• /grids list — показать сетки и их аккаунты (админ/оператор)\n"
     "• /grids actions <grid_name> — показать действия сетки (админ/оператор)\n"
     "• /grids run <grid_name> <name1,name2|all> — запустить сетку (админ/оператор)\n"
+    "• /grids send <grid_name> <name1,name2|all> — запустить рассылку (админ/оператор)\n"
     "\n"
     "Имя сетки: латиница, цифры, символы _ . - (до 64 символов)."
 )
@@ -122,6 +128,33 @@ def _parse_action_config(tokens: list[str]) -> GridActionConfigPayload | None:
         account_allocation=account_allocation,
         account_allocation_value=account_allocation_value,
     )
+
+
+def _parse_materials_config(tokens: list[str]) -> dict[str, Any] | None:
+    if not tokens:
+        return None
+    payload: dict[str, Any] = {}
+    variants: list[str] = []
+    for token in tokens:
+        if token.startswith("--text="):
+            payload["text"] = token.split("=", 1)[1]
+        elif token.startswith("--file="):
+            files_value = token.split("=", 1)[1]
+            payload["files"] = [item.strip() for item in files_value.split(",") if item.strip()]
+        elif token.startswith("--album="):
+            payload["album_url"] = token.split("=", 1)[1]
+        elif token.startswith("--template="):
+            payload["text_template"] = token.split("=", 1)[1]
+        elif token.startswith("--variants="):
+            values = token.split("=", 1)[1]
+            variants.extend([item.strip() for item in values.replace("|", ",").split(",") if item.strip()])
+        elif token.startswith("--variant="):
+            value = token.split("=", 1)[1].strip()
+            if value:
+                variants.append(value)
+    if variants:
+        payload["random_variants"] = variants
+    return payload or None
 
 
 async def _respond_with_grids(message: Message, store: Storage) -> None:
@@ -333,6 +366,54 @@ def register_grids(dp: Dispatcher, store: Storage, settings: Settings) -> None:
             )
             return
 
+        if action == "set-materials":
+            if not await ensure_role(
+                message,
+                settings,
+                {Role.ADMIN},
+                "привязка материалов",
+            ):
+                return
+            if len(parts) < 4:
+                await message.answer(
+                    "Формат: /grids set-materials <grid_name> <action> [--text=TEXT "
+                    "--file=PATH1,PATH2 --album=URL --template=TEXT --variants=TEXT1|TEXT2]\n"
+                    + GRIDS_HELP
+                )
+                return
+
+            grid_name = parts[2].strip()
+            tokens = shlex.split(parts[3].strip())
+            if len(tokens) < 2:
+                await message.answer(
+                    "Формат: /grids set-materials <grid_name> <action> [options]\n"
+                    + GRIDS_HELP
+                )
+                return
+            action_name = tokens[0]
+            payload = _parse_materials_config(tokens[1:])
+            if not payload:
+                await message.answer(
+                    "Укажите материалы: --text, --file, --album, --template или --variants.\n"
+                    + GRIDS_HELP
+                )
+                return
+            try:
+                update_grid_action_materials(
+                    store,
+                    message.chat.id,
+                    grid_name,
+                    action_name,
+                    payload=payload,
+                )
+            except ServiceError as exc:
+                await message.answer(_service_error_response(exc))
+                return
+            await message.answer(
+                f"Материалы привязаны к действию {action_name} в сетке {grid_name}."
+            )
+            return
+
         if action == "remove-account":
             if not await ensure_role(
                 message,
@@ -418,6 +499,36 @@ def register_grids(dp: Dispatcher, store: Storage, settings: Settings) -> None:
 
             await message.answer(
                 "Запускаю сетку "
+                f"{grid_name} для аккаунтов: {', '.join(result.accounts)}.\n"
+                f"Действия: {', '.join(result.actions)}."
+            )
+            return
+
+        if action == "send":
+            if not await ensure_role(
+                message,
+                settings,
+                {Role.ADMIN, Role.OPERATOR},
+                "запуск рассылки",
+            ):
+                return
+            if len(parts) < 4:
+                await message.answer(
+                    "Формат: /grids send <grid_name> <name1,name2|all>\n" + GRIDS_HELP
+                )
+                return
+
+            grid_name = parts[2].strip()
+            try:
+                result = schedule_grid_run(
+                    store, settings, message.chat.id, grid_name, parts[3]
+                )
+            except ServiceError as exc:
+                await message.answer(_service_error_response(exc))
+                return
+
+            await message.answer(
+                "Запускаю рассылку "
                 f"{grid_name} для аккаунтов: {', '.join(result.accounts)}.\n"
                 f"Действия: {', '.join(result.actions)}."
             )

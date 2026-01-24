@@ -36,6 +36,7 @@ from shared.services.grids import (
     remove_grid_action,
     run_grid,
     schedule_grid_run,
+    update_grid_action_materials,
 )
 from shared.services.schedule import ScheduleRuleList, get_schedule_state, list_active_rules, update_schedule_state
 
@@ -79,5 +80,6 @@ __all__ = [
     "remove_grid_action",
     "run_grid",
     "schedule_grid_run",
+    "update_grid_action_materials",
     "update_schedule_state",
 ]
