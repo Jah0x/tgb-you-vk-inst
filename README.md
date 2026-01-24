@@ -9,6 +9,14 @@
 - `shared` — общий код: router, providers, модели Job.
 - Подробности по модулям и правилам разработки: [docs/PROJECT_NOTES.md](docs/PROJECT_NOTES.md).
 
+## Grids (сеточные действия)
+
+Пример добавления действия с конфигом через бота:
+
+```text
+/grids add-action grid1 reaction --count=10 --jitter=on --min=1800 --max=2400 --account=all
+```
+
 ## Локальный запуск (без Docker)
 
 1. Установите зависимости:

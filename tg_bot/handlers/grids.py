@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import shlex
+from typing import Any
+
 from aiogram import Dispatcher, F
 from aiogram.types import Message
 
@@ -15,6 +18,7 @@ from shared.services import (
     remove_grid_action,
     schedule_grid_run,
 )
+from shared.services.grids import GridActionConfigPayload
 from shared.services.errors import ServiceError
 from shared.storage import Storage
 from tg_bot.handlers.permissions import Role, ensure_role
@@ -25,7 +29,8 @@ GRIDS_HELP = (
     "• /grids create <grid_name> — создать новую сетку (админ)\n"
     "• /grids add-account <grid_name> <name1,name2|all> — добавить аккаунты в сетку (админ)\n"
     "• /grids remove-account <grid_name> <name1,name2|all> — удалить аккаунты из сетки (админ)\n"
-    "• /grids add-action <grid_name> <action> — добавить действие для сетки (админ)\n"
+    "• /grids add-action <grid_name> <action> [--count=N] [--jitter=on|off] [--min=SEC] [--max=SEC] [--account=all|name1,name2]\n"
+    "  — добавить действие для сетки (админ)\n"
     "• /grids remove-action <grid_name> <action> — удалить действие из сетки (админ)\n"
     "• /grids delete <grid_name> — удалить сетку (админ)\n"
     "• /grids list — показать сетки и их аккаунты (админ/оператор)\n"
@@ -34,6 +39,65 @@ GRIDS_HELP = (
     "\n"
     "Имя сетки: латиница, цифры, символы _ . - (до 64 символов)."
 )
+
+
+def _format_grid_action_config(config: GridActionConfigPayload | None) -> str:
+    if not config:
+        return ""
+    parts: list[str] = []
+    if config.type:
+        parts.append(f"type={config.type}")
+    if config.payload:
+        parts.append(f"payload={config.payload}")
+    if config.min_delay_s is not None and config.max_delay_s is not None:
+        parts.append(f"delay={config.min_delay_s}-{config.max_delay_s}s")
+    if config.random_jitter_enabled is not None:
+        parts.append(
+            "jitter=on" if config.random_jitter_enabled else "jitter=off"
+        )
+    if config.account_selector:
+        parts.append(f"accounts={config.account_selector}")
+    return " (" + ", ".join(parts) + ")" if parts else ""
+
+
+def _parse_action_config(tokens: list[str]) -> GridActionConfigPayload | None:
+    if not tokens:
+        return None
+    payload: dict[str, Any] = {}
+    min_delay_s: int | None = None
+    max_delay_s: int | None = None
+    random_jitter_enabled: bool | None = None
+    account_selector: str | None = None
+
+    for token in tokens:
+        if token.startswith("--count="):
+            value = token.split("=", 1)[1]
+            if value.isdigit():
+                payload["count"] = int(value)
+            else:
+                payload["count"] = value
+        elif token.startswith("--min="):
+            value = token.split("=", 1)[1]
+            min_delay_s = int(value) if value.isdigit() else None
+        elif token.startswith("--max="):
+            value = token.split("=", 1)[1]
+            max_delay_s = int(value) if value.isdigit() else None
+        elif token.startswith("--jitter="):
+            value = token.split("=", 1)[1].lower()
+            if value in {"on", "true", "yes", "1"}:
+                random_jitter_enabled = True
+            elif value in {"off", "false", "no", "0"}:
+                random_jitter_enabled = False
+        elif token.startswith("--account="):
+            account_selector = token.split("=", 1)[1]
+    return GridActionConfigPayload(
+        type=None,
+        payload=payload or None,
+        min_delay_s=min_delay_s,
+        max_delay_s=max_delay_s,
+        random_jitter_enabled=random_jitter_enabled,
+        account_selector=account_selector,
+    )
 
 
 async def _respond_with_grids(message: Message, store: Storage) -> None:
@@ -103,10 +167,23 @@ def register_grids(dp: Dispatcher, store: Storage, settings: Settings) -> None:
                 return
 
             if result.actions:
-                await message.answer(
-                    "Действия сетки "
-                    f"{grid_name}: {', '.join(result.actions)}."
-                )
+                lines = [f"Действия сетки {grid_name}:"]
+                for action_info in result.actions:
+                    config_payload = None
+                    if action_info.config:
+                        config_payload = GridActionConfigPayload(
+                            type=action_info.config.type,
+                            payload=action_info.config.payload,
+                            min_delay_s=action_info.config.min_delay_s,
+                            max_delay_s=action_info.config.max_delay_s,
+                            random_jitter_enabled=action_info.config.random_jitter_enabled,
+                            account_selector=action_info.config.account_selector,
+                        )
+                    lines.append(
+                        f"• {action_info.action}"
+                        f"{_format_grid_action_config(config_payload)}"
+                    )
+                await message.answer("\n".join(lines))
             else:
                 await message.answer(f"В сетке {grid_name} пока нет действий.")
             return
@@ -205,9 +282,22 @@ def register_grids(dp: Dispatcher, store: Storage, settings: Settings) -> None:
                 return
 
             grid_name = parts[2].strip()
-            action_name = parts[3].strip()
+            tokens = shlex.split(parts[3].strip())
+            if not tokens:
+                await message.answer(
+                    "Формат: /grids add-action <grid_name> <action>\n" + GRIDS_HELP
+                )
+                return
+            action_name = tokens[0]
+            config_payload = _parse_action_config(tokens[1:])
             try:
-                add_grid_action(store, message.chat.id, grid_name, action_name)
+                add_grid_action(
+                    store,
+                    message.chat.id,
+                    grid_name,
+                    action_name,
+                    config=config_payload,
+                )
             except ServiceError as exc:
                 await message.answer(_service_error_response(exc))
                 return

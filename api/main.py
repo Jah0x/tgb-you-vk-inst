@@ -22,6 +22,7 @@ from shared.services import (
     remove_grid_action,
     schedule_grid_run,
 )
+from shared.services.grids import GridActionConfigPayload
 from shared.services.errors import ConflictError, NotFoundError, ServiceError, ValidationError
 from shared.storage import Storage, init_db
 
@@ -44,8 +45,18 @@ class GridAccountsRequest(BaseModel):
     accounts: str | list[str]
 
 
+class GridActionConfigRequest(BaseModel):
+    type: str | None = None
+    payload: dict[str, object] | None = None
+    min_delay_s: int | None = Field(None, ge=0)
+    max_delay_s: int | None = Field(None, ge=0)
+    random_jitter_enabled: bool | None = None
+    account_selector: str | None = None
+
+
 class GridActionRequest(BaseModel):
     action: str = Field(..., min_length=1)
+    config: GridActionConfigRequest | None = None
 
 
 class AccountListResponseModel(BaseModel):
@@ -80,12 +91,26 @@ class GridAccountsRemoveResponseModel(BaseModel):
     skipped: list[str]
 
 
+class GridActionConfigModel(BaseModel):
+    type: str
+    payload: dict[str, object] | None = None
+    min_delay_s: int | None = None
+    max_delay_s: int | None = None
+    random_jitter_enabled: bool
+    account_selector: str | None = None
+
+
+class GridActionInfoModel(BaseModel):
+    action: str
+    config: GridActionConfigModel | None = None
+
+
 class GridActionsResponseModel(BaseModel):
-    actions: list[str]
+    actions: list[GridActionInfoModel]
 
 
 class GridActionResponseModel(BaseModel):
-    action: str
+    action: GridActionInfoModel
 
 
 def _handle_service_error(exc: ServiceError) -> None:
@@ -217,8 +242,24 @@ def api_add_grid_action(
     grid_name: str,
     payload: GridActionRequest,
 ) -> GridActionResponseModel:
+    config_payload: GridActionConfigPayload | None = None
+    if payload.config:
+        config_payload = GridActionConfigPayload(
+            type=payload.config.type,
+            payload=payload.config.payload,
+            min_delay_s=payload.config.min_delay_s,
+            max_delay_s=payload.config.max_delay_s,
+            random_jitter_enabled=payload.config.random_jitter_enabled,
+            account_selector=payload.config.account_selector,
+        )
     try:
-        result = add_grid_action(store, chat_id, grid_name, payload.action)
+        result = add_grid_action(
+            store,
+            chat_id,
+            grid_name,
+            payload.action,
+            config=config_payload,
+        )
         return GridActionResponseModel(**asdict(result))
     except ServiceError as exc:
         _handle_service_error(exc)

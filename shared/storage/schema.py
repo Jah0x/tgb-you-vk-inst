@@ -40,6 +40,20 @@ SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS grid_action_configs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        grid_action_id INTEGER NOT NULL UNIQUE,
+        type TEXT NOT NULL,
+        payload_json TEXT,
+        min_delay_s INTEGER,
+        max_delay_s INTEGER,
+        random_jitter_enabled INTEGER NOT NULL DEFAULT 0,
+        account_selector TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(grid_action_id) REFERENCES grid_actions(id) ON DELETE CASCADE
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS channels (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         chat_id INTEGER NOT NULL,

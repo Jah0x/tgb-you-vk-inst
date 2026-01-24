@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 from urllib.parse import urlparse
 
-from shared.models import EscalationRule, GridAction, PostEvent, ScheduleRule
+from shared.models import EscalationRule, GridAction, GridActionConfig, PostEvent, ScheduleRule
 from shared.storage.schema import SCHEMA_STATEMENTS
 
 
@@ -132,27 +132,117 @@ class Storage:
             for row in rows
         ]
 
-    def add_grid_action(self, chat_id: int, grid_name: str, action: str) -> bool:
+    def list_grid_actions_with_configs(
+        self, chat_id: int, grid_name: str
+    ) -> list[tuple[GridAction, GridActionConfig | None]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    ga.id AS action_id,
+                    ga.grid_id AS grid_id,
+                    ga.action AS action,
+                    gac.id AS config_id,
+                    gac.type AS config_type,
+                    gac.payload_json AS payload_json,
+                    gac.min_delay_s AS min_delay_s,
+                    gac.max_delay_s AS max_delay_s,
+                    gac.random_jitter_enabled AS random_jitter_enabled,
+                    gac.account_selector AS account_selector
+                FROM grid_actions ga
+                JOIN grids g ON g.id = ga.grid_id
+                LEFT JOIN grid_action_configs gac ON gac.grid_action_id = ga.id
+                WHERE g.chat_id = ? AND g.name = ?
+                ORDER BY ga.id
+                """,
+                (chat_id, grid_name),
+            ).fetchall()
+        results: list[tuple[GridAction, GridActionConfig | None]] = []
+        for row in rows:
+            action = GridAction(
+                id=row["action_id"], grid_id=row["grid_id"], action=row["action"]
+            )
+            if row["config_id"] is None:
+                config = None
+            else:
+                config = GridActionConfig(
+                    id=row["config_id"],
+                    grid_action_id=row["action_id"],
+                    type=row["config_type"],
+                    payload_json=row["payload_json"],
+                    min_delay_s=row["min_delay_s"],
+                    max_delay_s=row["max_delay_s"],
+                    random_jitter_enabled=bool(row["random_jitter_enabled"]),
+                    account_selector=row["account_selector"],
+                )
+            results.append((action, config))
+        return results
+
+    def add_grid_action(self, chat_id: int, grid_name: str, action: str) -> int | None:
         with self._connect() as conn:
             grid = conn.execute(
                 "SELECT id FROM grids WHERE chat_id = ? AND name = ?",
                 (chat_id, grid_name),
             ).fetchone()
             if not grid:
-                return False
+                return None
             grid_id = grid["id"]
             existing = conn.execute(
                 "SELECT 1 FROM grid_actions WHERE grid_id = ? AND action = ?",
                 (grid_id, action),
             ).fetchone()
             if existing:
-                return False
+                return None
             conn.execute(
                 "INSERT INTO grid_actions (grid_id, action) VALUES (?, ?)",
                 (grid_id, action),
             )
+            action_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
             conn.commit()
-        return True
+        return int(action_id)
+
+    def upsert_grid_action_config(
+        self,
+        grid_action_id: int,
+        action_type: str,
+        payload_json: str | None,
+        min_delay_s: int | None,
+        max_delay_s: int | None,
+        random_jitter_enabled: bool,
+        account_selector: str | None,
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO grid_action_configs (
+                    grid_action_id,
+                    type,
+                    payload_json,
+                    min_delay_s,
+                    max_delay_s,
+                    random_jitter_enabled,
+                    account_selector
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(grid_action_id) DO UPDATE SET
+                    type = excluded.type,
+                    payload_json = excluded.payload_json,
+                    min_delay_s = excluded.min_delay_s,
+                    max_delay_s = excluded.max_delay_s,
+                    random_jitter_enabled = excluded.random_jitter_enabled,
+                    account_selector = excluded.account_selector
+                """,
+                (
+                    grid_action_id,
+                    action_type,
+                    payload_json,
+                    min_delay_s,
+                    max_delay_s,
+                    int(random_jitter_enabled),
+                    account_selector,
+                ),
+            )
+            conn.commit()
 
     def remove_grid_action(self, chat_id: int, grid_name: str, action: str) -> bool:
         with self._connect() as conn:

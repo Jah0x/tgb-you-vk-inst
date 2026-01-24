@@ -32,6 +32,18 @@ class GridAction:
 
 
 @dataclass(frozen=True)
+class GridActionConfig:
+    id: int
+    grid_action_id: int
+    type: str
+    payload_json: str | None
+    min_delay_s: int | None
+    max_delay_s: int | None
+    random_jitter_enabled: bool
+    account_selector: str | None
+
+
+@dataclass(frozen=True)
 class Channel:
     id: int
     chat_id: int
