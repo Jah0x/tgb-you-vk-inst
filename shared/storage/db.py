@@ -422,6 +422,21 @@ class Storage:
             except sqlite3.IntegrityError:
                 return False
 
+    def get_or_create_channel(self, chat_id: int, name: str) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id FROM channels WHERE chat_id = ? AND name = ?",
+                (chat_id, name),
+            ).fetchone()
+            if row:
+                return int(row["id"])
+            cursor = conn.execute(
+                "INSERT INTO channels (chat_id, name) VALUES (?, ?)",
+                (chat_id, name),
+            )
+            conn.commit()
+        return int(cursor.lastrowid)
+
     def list_pending_post_events(
         self, channel_id: int | None = None, limit: int = 100
     ) -> list[PostEvent]:
