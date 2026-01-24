@@ -29,7 +29,9 @@ GRIDS_HELP = (
     "• /grids create <grid_name> — создать новую сетку (админ)\n"
     "• /grids add-account <grid_name> <name1,name2|all> — добавить аккаунты в сетку (админ)\n"
     "• /grids remove-account <grid_name> <name1,name2|all> — удалить аккаунты из сетки (админ)\n"
-    "• /grids add-action <grid_name> <action> [--count=N] [--jitter=on|off] [--min=SEC] [--max=SEC] [--account=all|name1,name2]\n"
+    "• /grids add-action <grid_name> <action> [--count=N] [--jitter=on|off] "
+    "[--min=SEC] [--max=SEC] [--account=all|name1,name2] "
+    "[--alloc-count=N|--alloc-percent=N|--alloc-accounts=name1,name2]\n"
     "  — добавить действие для сетки (админ)\n"
     "• /grids remove-action <grid_name> <action> — удалить действие из сетки (админ)\n"
     "• /grids delete <grid_name> — удалить сетку (админ)\n"
@@ -57,6 +59,10 @@ def _format_grid_action_config(config: GridActionConfigPayload | None) -> str:
         )
     if config.account_selector:
         parts.append(f"accounts={config.account_selector}")
+    if config.account_allocation and config.account_allocation_value:
+        parts.append(
+            f"allocation={config.account_allocation}:{config.account_allocation_value}"
+        )
     return " (" + ", ".join(parts) + ")" if parts else ""
 
 
@@ -68,6 +74,8 @@ def _parse_action_config(tokens: list[str]) -> GridActionConfigPayload | None:
     max_delay_s: int | None = None
     random_jitter_enabled: bool | None = None
     account_selector: str | None = None
+    account_allocation: str | None = None
+    account_allocation_value: str | None = None
 
     for token in tokens:
         if token.startswith("--count="):
@@ -90,6 +98,15 @@ def _parse_action_config(tokens: list[str]) -> GridActionConfigPayload | None:
                 random_jitter_enabled = False
         elif token.startswith("--account="):
             account_selector = token.split("=", 1)[1]
+        elif token.startswith("--alloc-count="):
+            account_allocation = "count"
+            account_allocation_value = token.split("=", 1)[1]
+        elif token.startswith("--alloc-percent="):
+            account_allocation = "percent"
+            account_allocation_value = token.split("=", 1)[1]
+        elif token.startswith("--alloc-accounts="):
+            account_allocation = "explicit_list"
+            account_allocation_value = token.split("=", 1)[1]
     return GridActionConfigPayload(
         type=None,
         payload=payload or None,
@@ -97,6 +114,8 @@ def _parse_action_config(tokens: list[str]) -> GridActionConfigPayload | None:
         max_delay_s=max_delay_s,
         random_jitter_enabled=random_jitter_enabled,
         account_selector=account_selector,
+        account_allocation=account_allocation,
+        account_allocation_value=account_allocation_value,
     )
 
 
@@ -178,6 +197,8 @@ def register_grids(dp: Dispatcher, store: Storage, settings: Settings) -> None:
                             max_delay_s=action_info.config.max_delay_s,
                             random_jitter_enabled=action_info.config.random_jitter_enabled,
                             account_selector=action_info.config.account_selector,
+                            account_allocation=action_info.config.account_allocation,
+                            account_allocation_value=action_info.config.account_allocation_value,
                         )
                     lines.append(
                         f"• {action_info.action}"

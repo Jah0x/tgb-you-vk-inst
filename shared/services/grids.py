@@ -62,6 +62,8 @@ class GridActionConfigPayload:
     max_delay_s: int | None
     random_jitter_enabled: bool | None
     account_selector: str | None
+    account_allocation: str | None
+    account_allocation_value: str | None
 
 
 @dataclass(frozen=True)
@@ -72,6 +74,8 @@ class GridActionConfigInfo:
     max_delay_s: int | None
     random_jitter_enabled: bool
     account_selector: str | None
+    account_allocation: str | None
+    account_allocation_value: str | None
 
 
 @dataclass(frozen=True)
@@ -179,6 +183,8 @@ def add_grid_action(
             max_delay_s=config_info.max_delay_s,
             random_jitter_enabled=config_info.random_jitter_enabled,
             account_selector=config_info.account_selector,
+            account_allocation=config_info.account_allocation,
+            account_allocation_value=config_info.account_allocation_value,
         )
     return GridActionResponse(
         action=GridActionInfo(action=action, config=config_info)
@@ -221,6 +227,8 @@ def _format_action_config_info(
         max_delay_s=config.max_delay_s,
         random_jitter_enabled=config.random_jitter_enabled,
         account_selector=config.account_selector,
+        account_allocation=config.account_allocation,
+        account_allocation_value=config.account_allocation_value,
     )
 
 
@@ -318,6 +326,75 @@ def _validate_grid_action_config(
         else:
             account_selector = "all"
 
+    account_allocation = config.account_allocation
+    account_allocation_value = config.account_allocation_value
+    if account_allocation_value is not None and not account_allocation:
+        raise ValidationError(
+            "Некорректное распределение аккаунтов.",
+            ["Укажите тип распределения."],
+        )
+    if account_allocation:
+        allocation_type = account_allocation.strip().lower()
+        allowed_allocation_types = {"count", "percent", "explicit_list"}
+        if allocation_type not in allowed_allocation_types:
+            raise ValidationError(
+                "Некорректное распределение аккаунтов.",
+                ["Допустимые типы: " + ", ".join(sorted(allowed_allocation_types))],
+            )
+        if account_allocation_value is None:
+            raise ValidationError(
+                "Некорректное распределение аккаунтов.",
+                ["Укажите значение для распределения аккаунтов."],
+            )
+        if allocation_type in {"count", "percent"}:
+            if isinstance(account_allocation_value, str):
+                raw_value = account_allocation_value.strip()
+                if not raw_value.isdigit():
+                    raise ValidationError(
+                        "Некорректное распределение аккаунтов.",
+                        ["Значение должно быть числом."],
+                    )
+                value_int = int(raw_value)
+            elif isinstance(account_allocation_value, int):
+                value_int = account_allocation_value
+            else:
+                raise ValidationError(
+                    "Некорректное распределение аккаунтов.",
+                    ["Значение должно быть числом."],
+                )
+            if value_int <= 0:
+                raise ValidationError(
+                    "Некорректное распределение аккаунтов.",
+                    ["Значение должно быть положительным числом."],
+                )
+            if allocation_type == "percent" and value_int > 100:
+                raise ValidationError(
+                    "Некорректное распределение аккаунтов.",
+                    ["Процент не может быть больше 100."],
+                )
+            account_allocation_value = str(value_int)
+        else:
+            if isinstance(account_allocation_value, list):
+                raw_names = account_allocation_value
+            else:
+                raw_names = parse_name_list(str(account_allocation_value))
+            if not raw_names:
+                raise ValidationError(
+                    "Некорректное распределение аккаунтов.",
+                    ["Укажите список аккаунтов."],
+                )
+            invalid_names = validate_names(raw_names)
+            if invalid_names:
+                raise ValidationError(
+                    "Некорректные имена аккаунтов.",
+                    [
+                        "Некорректные имена аккаунтов: " + ", ".join(invalid_names),
+                        "Используйте латиницу, цифры и символы _ . -",
+                    ],
+                )
+            account_allocation_value = ",".join(raw_names)
+        account_allocation = allocation_type
+
     payload_value = payload or None
     return GridActionConfigInfo(
         type=action_type,
@@ -326,6 +403,8 @@ def _validate_grid_action_config(
         max_delay_s=max_delay_s,
         random_jitter_enabled=random_jitter_enabled,
         account_selector=account_selector,
+        account_allocation=account_allocation,
+        account_allocation_value=account_allocation_value,
     )
 
 
@@ -369,6 +448,54 @@ def _resolve_account_selection(
             ],
         )
     return found
+
+
+def _apply_account_selector(accounts: list[str], selector: str | None) -> list[str]:
+    if not selector or selector.lower() == "all":
+        return accounts
+    selected_names = set(parse_name_list(selector))
+    return [name for name in accounts if name in selected_names]
+
+
+def _apply_account_allocation(
+    accounts: list[str],
+    allocation_type: str,
+    allocation_value: str,
+) -> list[str]:
+    if allocation_type == "count":
+        count = int(allocation_value)
+        return accounts[:count]
+    if allocation_type == "percent":
+        percent = int(allocation_value)
+        if not accounts:
+            return []
+        count = max(1, int(len(accounts) * percent / 100))
+        return accounts[:count]
+    explicit_names = parse_name_list(allocation_value)
+    available = set(accounts)
+    return [name for name in explicit_names if name in available]
+
+
+def _allocate_accounts_for_action(
+    accounts: list[str],
+    available_accounts: list[str],
+    config: GridActionConfig | None,
+) -> tuple[list[str], list[str]]:
+    if config and config.account_allocation:
+        base_accounts = available_accounts
+    else:
+        base_accounts = accounts
+    selected = _apply_account_selector(base_accounts, config.account_selector if config else None)
+    if config and config.account_allocation and config.account_allocation_value:
+        assigned = _apply_account_allocation(
+            selected,
+            config.account_allocation,
+            config.account_allocation_value,
+        )
+        assigned_set = set(assigned)
+        remaining = [name for name in available_accounts if name not in assigned_set]
+        return assigned, remaining
+    return selected, available_accounts
 
 
 def add_accounts_to_grid(
@@ -451,8 +578,8 @@ def run_grid(
         )
 
     accounts = _resolve_account_selection(store, chat_id, raw_accounts)
-    actions = store.list_grid_actions(chat_id, grid_name)
-    if not actions:
+    actions_with_configs = store.list_grid_actions_with_configs(chat_id, grid_name)
+    if not actions_with_configs:
         raise ValidationError(
             "Для сетки не настроены действия.",
             ["Добавьте действия для сетки перед запуском."],
@@ -460,25 +587,36 @@ def run_grid(
 
     redis_conn = Redis.from_url(settings.redis_url)
     grid_queue = Queue(settings.rq_grid_actions_queue, connection=redis_conn)
-    action_names = [action.action for action in actions]
-    for action in action_names:
+    action_names: list[str] = []
+    queued_jobs = 0
+    available_accounts = accounts.copy()
+    for action, config in actions_with_configs:
+        action_names.append(action.action)
+        assigned_accounts, available_accounts = _allocate_accounts_for_action(
+            accounts,
+            available_accounts,
+            config,
+        )
+        if not assigned_accounts:
+            continue
         payload = json.dumps(
             {
                 "grid_name": grid_name,
                 "chat_id": chat_id,
-                "accounts": accounts,
-                "action": action,
+                "accounts": assigned_accounts,
+                "action": action.action,
             }
         )
         grid_queue.enqueue(
             "worker.tasks.grid_actions.apply_grid_action",
             payload,
         )
+        queued_jobs += 1
 
     return GridRunResponse(
         accounts=accounts,
         actions=action_names,
-        queued_jobs=len(action_names),
+        queued_jobs=queued_jobs,
     )
 
 

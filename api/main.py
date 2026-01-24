@@ -52,6 +52,8 @@ class GridActionConfigRequest(BaseModel):
     max_delay_s: int | None = Field(None, ge=0)
     random_jitter_enabled: bool | None = None
     account_selector: str | None = None
+    account_allocation: str | None = None
+    account_allocation_value: int | str | list[str] | None = None
 
 
 class GridActionRequest(BaseModel):
@@ -98,6 +100,8 @@ class GridActionConfigModel(BaseModel):
     max_delay_s: int | None = None
     random_jitter_enabled: bool
     account_selector: str | None = None
+    account_allocation: str | None = None
+    account_allocation_value: str | None = None
 
 
 class GridActionInfoModel(BaseModel):
@@ -244,6 +248,12 @@ def api_add_grid_action(
 ) -> GridActionResponseModel:
     config_payload: GridActionConfigPayload | None = None
     if payload.config:
+        allocation_value: str | None = None
+        if payload.config.account_allocation_value is not None:
+            if isinstance(payload.config.account_allocation_value, list):
+                allocation_value = ",".join(payload.config.account_allocation_value)
+            else:
+                allocation_value = str(payload.config.account_allocation_value)
         config_payload = GridActionConfigPayload(
             type=payload.config.type,
             payload=payload.config.payload,
@@ -251,6 +261,8 @@ def api_add_grid_action(
             max_delay_s=payload.config.max_delay_s,
             random_jitter_enabled=payload.config.random_jitter_enabled,
             account_selector=payload.config.account_selector,
+            account_allocation=payload.config.account_allocation,
+            account_allocation_value=allocation_value,
         )
     try:
         result = add_grid_action(

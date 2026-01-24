@@ -49,6 +49,8 @@ SCHEMA_STATEMENTS = [
         max_delay_s INTEGER,
         random_jitter_enabled INTEGER NOT NULL DEFAULT 0,
         account_selector TEXT,
+        account_allocation TEXT,
+        account_allocation_value TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(grid_action_id) REFERENCES grid_actions(id) ON DELETE CASCADE
     )
