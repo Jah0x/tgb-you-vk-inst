@@ -7,6 +7,7 @@
 - `tg_bot` — aiogram v3, принимает сообщения, детектит провайдер и кладёт Job в RQ.
 - `worker` — RQ worker, выполняет Job и отправляет результат пользователю.
 - `shared` — общий код: router, providers, модели Job.
+- Подробности по модулям и правилам разработки: [docs/PROJECT_NOTES.md](docs/PROJECT_NOTES.md).
 
 ## Локальный запуск (без Docker)
 
