@@ -46,6 +46,7 @@ def handle_post_event(payload: str) -> None:
     data = json.loads(payload)
     channel_id = data["channel_id"]
     post_key = data["post_key"]
+    selection = _resolve_selection(data.get("selection"), post_key)
     settings = load_settings()
     store = Storage(settings.db_url)
     escalation_rules = store.list_escalation_rules(channel_id)
@@ -65,7 +66,7 @@ def handle_post_event(payload: str) -> None:
                 "channel_id": channel_id,
                 "post_key": post_key,
                 "action": action,
-                "metadata": {"level": step["level"]},
+                "metadata": {"level": step["level"], "selection": selection},
             }
         )
         if delay_seconds > 0:
@@ -87,3 +88,9 @@ def _action_for_level(level: int) -> str:
     if level == 2:
         return "reaction:2"
     return "comment"
+
+
+def _resolve_selection(selection: str | None, post_key: str) -> str:
+    if selection in {"latest", "explicit"}:
+        return selection
+    return "latest" if post_key == "latest" else "explicit"

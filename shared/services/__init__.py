@@ -5,7 +5,14 @@ from shared.services.accounts import (
     delete_account,
     list_accounts,
 )
-from shared.services.actions import PostEventList, add_post_event, list_pending_post_events, mark_post_event_processed
+from shared.services.actions import (
+    PostEventCreateResponse,
+    PostEventList,
+    add_post_event,
+    create_post_event_for_target,
+    list_pending_post_events,
+    mark_post_event_processed,
+)
 from shared.services.errors import ConflictError, NotFoundError, ServiceError, ValidationError
 from shared.services.grids import (
     GridAccountsResponse,
@@ -36,6 +43,7 @@ __all__ = [
     "AccountAddResponse",
     "AccountListResponse",
     "PostEventList",
+    "PostEventCreateResponse",
     "GridAccountsResponse",
     "GridAccountsRemoveResponse",
     "GridActionResponse",
@@ -56,6 +64,7 @@ __all__ = [
     "add_accounts_to_grid",
     "add_grid_action",
     "add_post_event",
+    "create_post_event_for_target",
     "create_grid",
     "delete_account",
     "delete_grid",
