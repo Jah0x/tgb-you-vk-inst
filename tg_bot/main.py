@@ -56,7 +56,7 @@ async def main() -> None:
 
     init_db(settings.db_url)
     store = Storage(settings.db_url)
-    register_handlers(dp, store)
+    register_handlers(dp, store, settings)
 
     @dp.message(F.text & ~F.text.startswith("/"))
     async def _message_handler(message: Message) -> None:

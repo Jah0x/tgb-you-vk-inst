@@ -3,17 +3,19 @@ from __future__ import annotations
 from aiogram import Dispatcher, F
 from aiogram.types import Message
 
+from shared.config import Settings
 from shared.services import add_accounts_to_grid, create_grid, list_grids, run_grid
 from shared.services.errors import ServiceError
 from shared.storage import Storage
+from tg_bot.handlers.permissions import Role, ensure_role
 from tg_bot.handlers.utils import format_accounts
 
 GRIDS_HELP = (
     "Команды для сеток:\n"
-    "• /grids create <grid_name> — создать новую сетку\n"
-    "• /grids add-account <grid_name> <name1,name2|all> — добавить аккаунты в сетку\n"
-    "• /grids list — показать сетки и их аккаунты\n"
-    "• /grids run <grid_name> <name1,name2|all> — запустить сетку\n"
+    "• /grids create <grid_name> — создать новую сетку (админ)\n"
+    "• /grids add-account <grid_name> <name1,name2|all> — добавить аккаунты в сетку (админ)\n"
+    "• /grids list — показать сетки и их аккаунты (админ/оператор)\n"
+    "• /grids run <grid_name> <name1,name2|all> — запустить сетку (админ/оператор)\n"
     "\n"
     "Имя сетки: латиница, цифры, символы _ . - (до 64 символов)."
 )
@@ -41,7 +43,7 @@ def _service_error_response(exc: ServiceError) -> str:
     return "\n".join([exc.message, *exc.details]) if exc.details else exc.message
 
 
-def register_grids(dp: Dispatcher, store: Storage) -> None:
+def register_grids(dp: Dispatcher, store: Storage, settings: Settings) -> None:
     @dp.message(F.text.startswith("/grids"))
     async def _grids_handler(message: Message) -> None:
         if not message.text:
@@ -54,10 +56,24 @@ def register_grids(dp: Dispatcher, store: Storage) -> None:
 
         action = parts[1].lower()
         if action == "list":
+            if not await ensure_role(
+                message,
+                settings,
+                {Role.ADMIN, Role.OPERATOR},
+                "просмотр сеток",
+            ):
+                return
             await _respond_with_grids(message, store)
             return
 
         if action == "create":
+            if not await ensure_role(
+                message,
+                settings,
+                {Role.ADMIN},
+                "создание сеток",
+            ):
+                return
             if len(parts) < 3:
                 await message.answer(
                     "Укажите имя сетки: /grids create grid_name\n" + GRIDS_HELP
@@ -77,6 +93,13 @@ def register_grids(dp: Dispatcher, store: Storage) -> None:
             return
 
         if action == "add-account":
+            if not await ensure_role(
+                message,
+                settings,
+                {Role.ADMIN},
+                "добавление аккаунтов в сетки",
+            ):
+                return
             if len(parts) < 4:
                 await message.answer(
                     "Формат: /grids add-account <grid_name> <name1,name2|all>\n"
@@ -101,6 +124,13 @@ def register_grids(dp: Dispatcher, store: Storage) -> None:
             return
 
         if action == "run":
+            if not await ensure_role(
+                message,
+                settings,
+                {Role.ADMIN, Role.OPERATOR},
+                "запуск сеток",
+            ):
+                return
             if len(parts) < 4:
                 await message.answer(
                     "Формат: /grids run <grid_name> <name1,name2|all>\n" + GRIDS_HELP

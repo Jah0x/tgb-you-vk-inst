@@ -6,6 +6,14 @@ from aiogram.types import Message
 from tg_bot.handlers.accounts import ACCOUNTS_HELP
 from tg_bot.handlers.grids import GRIDS_HELP
 
+ACCESS_RULES = (
+    "Роли и доступ:\n"
+    "• Админ: управление аккаунтами и сетками (создание, добавление, запуск).\n"
+    "• Оператор: просмотр списков и запуск сеток.\n"
+    "Роли задаются через переменные окружения ADMIN_CHAT_IDS и "
+    "OPERATOR_CHAT_IDS (список chat_id через запятую)."
+)
+
 HELP_TEXT = (
     "Доступные команды:\n"
     "/accounts — управление аккаунтами\n"
@@ -15,6 +23,8 @@ HELP_TEXT = (
     + ACCOUNTS_HELP
     + "\n\n"
     + GRIDS_HELP
+    + "\n\n"
+    + ACCESS_RULES
 )
 
 
