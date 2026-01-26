@@ -20,6 +20,9 @@ class Settings:
     scheduler_poll_seconds: int
     admin_chat_ids: frozenset[int]
     operator_chat_ids: frozenset[int]
+    tg_api_id: int | None
+    tg_api_hash: str | None
+    tg_db_url: str
 
 
 def _parse_chat_ids(raw: str | None) -> frozenset[int]:
@@ -51,6 +54,10 @@ def load_settings() -> Settings:
     scheduler_poll_seconds = int(os.getenv("SCHEDULER_POLL_SECONDS", "30"))
     admin_chat_ids = _parse_chat_ids(os.getenv("ADMIN_CHAT_IDS"))
     operator_chat_ids = _parse_chat_ids(os.getenv("OPERATOR_CHAT_IDS"))
+    tg_api_id_raw = os.getenv("TG_API_ID")
+    tg_api_id = int(tg_api_id_raw) if tg_api_id_raw and tg_api_id_raw.isdigit() else None
+    tg_api_hash = os.getenv("TG_API_HASH") or None
+    tg_db_url = os.getenv("TG_DB_URL", db_url)
     return Settings(
         bot_token=bot_token,
         redis_url=redis_url,
@@ -66,4 +73,7 @@ def load_settings() -> Settings:
         scheduler_poll_seconds=scheduler_poll_seconds,
         admin_chat_ids=admin_chat_ids,
         operator_chat_ids=operator_chat_ids,
+        tg_api_id=tg_api_id,
+        tg_api_hash=tg_api_hash,
+        tg_db_url=tg_db_url,
     )
