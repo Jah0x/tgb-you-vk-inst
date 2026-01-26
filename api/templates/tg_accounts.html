@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Панель TG-аккаунтов</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        margin: 2rem;
+        background: #f5f7fb;
+        color: #1f2937;
+      }
+      h1 {
+        margin-bottom: 0.25rem;
+      }
+      .container {
+        max-width: 960px;
+        margin: 0 auto;
+      }
+      .card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+        margin-bottom: 1.5rem;
+      }
+      .row {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+      label {
+        font-weight: 600;
+        display: block;
+        margin-bottom: 0.35rem;
+      }
+      input {
+        padding: 0.6rem 0.8rem;
+        border-radius: 8px;
+        border: 1px solid #d1d5db;
+        width: 100%;
+      }
+      button {
+        background: #2563eb;
+        color: #fff;
+        border: none;
+        padding: 0.65rem 1rem;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button.secondary {
+        background: #0f172a;
+      }
+      .message {
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        background: #e0f2fe;
+        color: #0c4a6e;
+        margin-bottom: 1rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        padding: 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      th {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #6b7280;
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        background: #fef3c7;
+        color: #92400e;
+        font-size: 0.8rem;
+        font-weight: 600;
+      }
+      .badge.active {
+        background: #dcfce7;
+        color: #166534;
+      }
+      .hint {
+        color: #6b7280;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Панель управления Telegram-аккаунтами</h1>
+      <p class="hint">Добавьте номер, запросите код, затем подтвердите его, чтобы сохранить сессию.</p>
+
+      {% if message %}
+      <div class="message">{{ message }}</div>
+      {% endif %}
+
+      <div class="card">
+        <h2>Запросить код</h2>
+        <form action="/panel/tg-accounts/send-code" method="post" class="row">
+          <div style="flex: 1 1 240px;">
+            <label for="phone">Телефон (в международном формате)</label>
+            <input id="phone" name="phone" placeholder="+79990001122" required />
+          </div>
+          <div style="align-self: flex-end;">
+            <button type="submit">Отправить код</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Подтвердить код</h2>
+        <form action="/panel/tg-accounts/confirm" method="post" class="row">
+          <div style="flex: 1 1 200px;">
+            <label for="phone_confirm">Телефон</label>
+            <input id="phone_confirm" name="phone" placeholder="+79990001122" required />
+          </div>
+          <div style="flex: 1 1 120px;">
+            <label for="code">Код</label>
+            <input id="code" name="code" placeholder="12345" required />
+          </div>
+          <div style="flex: 1 1 200px;">
+            <label for="password">Пароль 2FA (если есть)</label>
+            <input id="password" name="password" placeholder="optional" />
+          </div>
+          <div style="align-self: flex-end;">
+            <button class="secondary" type="submit">Подтвердить</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Список аккаунтов</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Телефон</th>
+              <th>Статус</th>
+              <th>Сессия</th>
+              <th>Последний код</th>
+              <th>Последний логин</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for account in accounts %}
+            <tr>
+              <td>{{ account.phone }}</td>
+              <td>
+                <span class="badge {% if account.status == 'active' %}active{% endif %}">
+                  {{ account.status }}
+                </span>
+              </td>
+              <td>{{ "есть" if account.has_session else "нет" }}</td>
+              <td>{{ account.last_code_sent_at or "-" }}</td>
+              <td>{{ account.last_login_at or "-" }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="5" class="hint">Пока нет добавленных аккаунтов.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </body>
+</html>

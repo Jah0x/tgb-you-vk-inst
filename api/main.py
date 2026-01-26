@@ -4,8 +4,13 @@ from typing import Annotated
 
 from dataclasses import asdict
 
-from fastapi import FastAPI, HTTPException, Path, status
+from fastapi import FastAPI, Form, HTTPException, Path, Request, Response, status
+from fastapi.responses import RedirectResponse
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
+from telethon import TelegramClient
+from telethon.errors import SessionPasswordNeededError
+from telethon.sessions import StringSession
 
 from shared.config import load_settings
 from shared.services import (
@@ -26,12 +31,21 @@ from shared.services import (
 from shared.services.grids import GridActionConfigPayload
 from shared.services.errors import ConflictError, NotFoundError, ServiceError, ValidationError
 from shared.storage import Storage, init_db
+from shared.storage.tg_accounts import (
+    get_code_hash,
+    init_tg_db,
+    list_tg_accounts,
+    record_code_sent,
+    record_session,
+)
 
 app = FastAPI(title="tgb-you-vk API")
+templates = Jinja2Templates(directory="api/templates")
 
 settings = load_settings()
 init_db(settings.db_url)
 store = Storage(settings.db_url)
+init_tg_db(settings.tg_db_url)
 
 
 class AccountCreateRequest(BaseModel):
@@ -142,6 +156,43 @@ def _format_accounts_payload(payload: GridAccountsRequest) -> str:
     return ",".join(payload.accounts)
 
 
+def _require_tg_credentials() -> None:
+    if settings.tg_api_id is None or settings.tg_api_hash is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="TG_API_ID/TG_API_HASH не заданы.",
+        )
+
+
+async def _send_tg_code(phone: str) -> None:
+    _require_tg_credentials()
+    async with TelegramClient(StringSession(), settings.tg_api_id, settings.tg_api_hash) as client:
+        sent = await client.send_code_request(phone)
+        record_code_sent(settings.tg_db_url, phone, sent.phone_code_hash)
+
+
+async def _confirm_tg_code(phone: str, code: str, password: str | None) -> None:
+    _require_tg_credentials()
+    code_hash = get_code_hash(settings.tg_db_url, phone)
+    if not code_hash:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Сначала запросите код для этого номера.",
+        )
+    session = StringSession()
+    async with TelegramClient(session, settings.tg_api_id, settings.tg_api_hash) as client:
+        try:
+            await client.sign_in(phone=phone, code=code, phone_code_hash=code_hash)
+        except SessionPasswordNeededError:
+            if not password:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Для этого аккаунта включена 2FA. Укажите пароль.",
+                )
+            await client.sign_in(password=password)
+        record_session(settings.tg_db_url, phone, client.session.save())
+
+
 @app.get("/accounts/{chat_id}", response_model=AccountListResponseModel)
 def api_list_accounts(chat_id: Annotated[int, Path(..., ge=1)]) -> AccountListResponseModel:
     result = list_accounts(store, chat_id)
@@ -160,7 +211,12 @@ def api_add_accounts(
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@app.delete("/accounts/{chat_id}/{name}", status_code=status.HTTP_204_NO_CONTENT)
+@app.delete(
+    "/accounts/{chat_id}/{name}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    response_class=Response,
+)
 def api_delete_account(
     chat_id: Annotated[int, Path(..., ge=1)], name: str
 ) -> None:
@@ -168,6 +224,7 @@ def api_delete_account(
         delete_account(store, chat_id, name)
     except ServiceError as exc:
         _handle_service_error(exc)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.get("/grids/{chat_id}", response_model=GridListResponseModel)
@@ -188,7 +245,12 @@ def api_create_grid(
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@app.delete("/grids/{chat_id}/{name}", status_code=status.HTTP_204_NO_CONTENT)
+@app.delete(
+    "/grids/{chat_id}/{name}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    response_class=Response,
+)
 def api_delete_grid(
     chat_id: Annotated[int, Path(..., ge=1)], name: str
 ) -> None:
@@ -196,6 +258,7 @@ def api_delete_grid(
         delete_grid(store, chat_id, name)
     except ServiceError as exc:
         _handle_service_error(exc)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.post(
@@ -330,6 +393,8 @@ def api_update_grid_action_materials(
 @app.delete(
     "/grids/{chat_id}/{grid_name}/actions/{action}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    response_class=Response,
 )
 def api_remove_grid_action(
     chat_id: Annotated[int, Path(..., ge=1)],
@@ -340,6 +405,7 @@ def api_remove_grid_action(
         remove_grid_action(store, chat_id, grid_name, action)
     except ServiceError as exc:
         _handle_service_error(exc)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.post(
@@ -358,3 +424,40 @@ def api_remove_grid_accounts(
     except ServiceError as exc:
         _handle_service_error(exc)
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@app.get("/panel/tg-accounts")
+def panel_tg_accounts(request: Request, message: str | None = None) -> object:
+    accounts = list_tg_accounts(settings.tg_db_url)
+    return templates.TemplateResponse(
+        "tg_accounts.html",
+        {
+            "request": request,
+            "accounts": accounts,
+            "message": message,
+        },
+    )
+
+
+@app.post("/panel/tg-accounts/send-code")
+async def panel_send_code(
+    phone: Annotated[str, Form(...)],
+) -> RedirectResponse:
+    await _send_tg_code(phone)
+    return RedirectResponse(
+        url="/panel/tg-accounts?message=Код отправлен. Введите его для подтверждения.",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@app.post("/panel/tg-accounts/confirm")
+async def panel_confirm_code(
+    phone: Annotated[str, Form(...)],
+    code: Annotated[str, Form(...)],
+    password: Annotated[str | None, Form()] = None,
+) -> RedirectResponse:
+    await _confirm_tg_code(phone, code, password)
+    return RedirectResponse(
+        url="/panel/tg-accounts?message=Аккаунт подтвержден и сохранен.",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )

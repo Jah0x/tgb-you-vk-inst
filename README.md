@@ -44,6 +44,9 @@ export OPERATOR_CHAT_IDS="987654321,1122334455"
 export DATA_DIR="/tmp/tgb-data"
 export INSTAGRAM_COOKIES_PATH="/tmp/instagram-cookies.txt"
 export VK_COOKIES_PATH="/tmp/vk-cookies.txt"
+export TG_API_ID="123456"
+export TG_API_HASH="your_api_hash"
+export TG_DB_URL="postgresql://user:pass@localhost:5432/tg_farm"
 ```
 
 4. Запустите воркер:
@@ -57,6 +60,14 @@ python -m worker.main
 ```bash
 python -m tg_bot.main
 ```
+
+6. (Опционально) Запустите API с веб-панелью Telegram-аккаунтов:
+
+```bash
+python -m api.main
+```
+
+Панель доступна по адресу: `http://localhost:8000/panel/tg-accounts`.
 
 ## Docker Compose (опционально)
 
@@ -100,7 +111,7 @@ services:
 | --- | --- | --- |
 | bot | `BOT_TOKEN` | `REDIS_URL`, `RQ_QUEUE`, `DB_URL`, `ADMIN_CHAT_IDS`, `OPERATOR_CHAT_IDS` |
 | worker | `BOT_TOKEN` | `REDIS_URL`, `RQ_QUEUE`, `RQ_GRID_ACTIONS_QUEUE`, `RQ_POST_EVENTS_QUEUE`, `DB_URL`, `DATA_DIR`, `MAX_DURATION_SEC`, `MAX_FILESIZE_MB`, `INSTAGRAM_COOKIES_PATH`, `VK_COOKIES_PATH` |
-| api | — | `DB_URL` |
+| api | — | `DB_URL`, `TG_API_ID`, `TG_API_HASH`, `TG_DB_URL` |
 | scheduler | — | `REDIS_URL`, `RQ_POST_EVENTS_QUEUE`, `DB_URL`, `SCHEDULER_POLL_SECONDS` |
 
 ## Деплой в Kubernetes
